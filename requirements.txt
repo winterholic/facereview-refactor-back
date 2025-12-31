@@ -1,0 +1,57 @@
+# Web Framework
+Flask==3.0.2
+Werkzeug==3.0.2
+
+# Flask Extensions
+flask-socketio==5.3.6
+flask-cors==4.0.0
+python-socketio==5.11.0
+python-engineio==4.9.0
+
+# Database - Relational (MariaDB)
+PyMySQL==1.1.0
+SQLAlchemy==2.0.25
+Flask-SQLAlchemy==3.1.1
+
+# Database - NoSQL (MongoDB)
+pymongo==4.6.1
+
+# Security & Authentication
+bcrypt==4.1.2
+PyJWT==2.8.0
+
+# Machine Learning & Computer Vision
+tensorflow==2.15.0
+opencv-python==4.9.0.80
+cvlib==0.2.7
+Pillow==10.2.0
+numpy==1.26.3
+
+# Additional Dependencies
+requests==2.31.0
+progressbar==2.5
+imageio==2.33.1
+isodate==0.6.1
+
+# Utilities
+python-dotenv==1.0.0
+
+# Scheduler
+Flask-APScheduler==1.13.1
+redis==5.0.1
+
+# Production Server
+gunicorn==21.2.0
+eventlet==0.35.2
+
+# API Docs (Swagger / OpenAPI)
+flask-smorest==0.44.0
+marshmallow==3.21.1
+webargs==8.4.0
+apispec==6.6.1
+
+# Async Task Queue
+celery==5.3.6
+
+# Message Queue (Kafka)
+kafka-python==2.0.2
