@@ -24,9 +24,6 @@ services:
       start_period: 40s
 
   celery-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: facereview-app:latest
     container_name: facereview-celery-worker
     restart: unless-stopped
@@ -39,12 +36,10 @@ services:
     volumes:
       - ./logs:/app/logs
     depends_on:
-      - app
+      app:
+        condition: service_healthy
 
   kafka-consumer:
-    build:
-      context: .
-      dockerfile: Dockerfile
     image: facereview-app:latest
     container_name: facereview-kafka-consumer
     restart: unless-stopped
@@ -57,4 +52,5 @@ services:
     volumes:
       - ./logs:/app/logs
     depends_on:
-      - app
+      app:
+        condition: service_healthy
