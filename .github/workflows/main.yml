@@ -8,8 +8,7 @@ on:
 env:
   PYTHON_VERSION: '3.10'
   APP_NAME: facereview
-  DEPLOY_PATH: /home/ubuntu/facereview
-  DOCKER_IMAGE: facereview-app
+  DEPLOY_PATH: /home/winterholic/projects/services/new-facereview
 
 jobs:
   test:
@@ -47,8 +46,8 @@ jobs:
         fi
       continue-on-error: true
 
-  build:
-    name: Build Docker Image
+  deploy:
+    name: Deploy to Production
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
@@ -93,6 +92,8 @@ jobs:
         KAFKA_CLIENT_ID=${{ secrets.KAFKA_CLIENT_ID }}
         KAFKA_GROUP_ID=${{ secrets.KAFKA_GROUP_ID }}
         KAFKA_TOPIC_USER_EVENT=${{ secrets.KAFKA_TOPIC_USER_EVENT }}
+
+        LOG_LEVEL=INFO
         EOF
 
     - name: Copy files to server
@@ -103,10 +104,11 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         source: "."
-        target: ${{ env.DEPLOY_PATH }}/temp-deploy
-        rm: true
+        target: ${{ env.DEPLOY_PATH }}
+        rm: false
+        overwrite: true
 
-    - name: Build Docker image on server
+    - name: Deploy with Docker Compose
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -114,57 +116,19 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         script: |
-          echo "🔨 Building Docker image..."
-          cd ${{ env.DEPLOY_PATH }}/temp-deploy
-
-          # .env 파일을 메인 디렉토리로 복사
-          cp .env ${{ env.DEPLOY_PATH }}/.env
-
-          # 소스 코드 업데이트
-          rsync -av --exclude='.git' --exclude='temp-deploy' --exclude='venv' --exclude='__pycache__' ./ ${{ env.DEPLOY_PATH }}/
-
-          # Docker 이미지 빌드
-          cd ${{ env.DEPLOY_PATH }}
-          docker build -t ${{ env.DOCKER_IMAGE }}:latest .
-
-          # 임시 디렉토리 정리
-          rm -rf ${{ env.DEPLOY_PATH }}/temp-deploy
-
-          echo "✅ Docker image built successfully"
-
-  deploy:
-    name: Deploy to Production
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-    - name: Deploy Docker container
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
-        script: |
-          echo "🚀 Starting zero-downtime deployment..."
+          echo "🚀 Starting deployment..."
 
           cd ${{ env.DEPLOY_PATH }}
 
-          # 백업 생성
-          echo "💾 Creating backup..."
-          BACKUP_DIR="../facereview-backup-$(date +%Y%m%d-%H%M%S)"
-          mkdir -p $BACKUP_DIR
-          docker save ${{ env.DOCKER_IMAGE }}:latest -o $BACKUP_DIR/image.tar 2>/dev/null || echo "No previous image to backup"
+          mkdir -p logs uploads
 
-          # 무중단 배포 스크립트 실행
           chmod +x scripts/deploy.sh
+
           ./scripts/deploy.sh
 
-          echo "✅ Deployment completed successfully!"
+          echo "✅ Deployment completed!"
 
-    - name: Send deployment notification
-      if: always()
+    - name: Verify deployment
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -172,29 +136,21 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         script: |
-          if [ ${{ job.status }} == 'success' ]; then
-            echo "✅ Deployment successful - $(date)"
-          else
-            echo "❌ Deployment failed - $(date)"
-            # 백업에서 복구
-            LATEST_BACKUP=$(ls -dt ../facereview-backup-* 2>/dev/null | head -1)
-            if [ -n "$LATEST_BACKUP" ] && [ -f "$LATEST_BACKUP/image.tar" ]; then
-              echo "Rolling back to: $LATEST_BACKUP"
-              docker load -i $LATEST_BACKUP/image.tar
-              cd ${{ env.DEPLOY_PATH }}
-              ./scripts/deploy.sh
-            fi
-          fi
-      continue-on-error: true
+          cd ${{ env.DEPLOY_PATH }}
 
-  cleanup:
-    name: Cleanup old backups
-    needs: deploy
-    runs-on: ubuntu-latest
-    if: success()
+          echo "📊 Checking service status..."
+          docker-compose ps
 
-    steps:
-    - name: Remove old backups and images
+          echo ""
+          echo "🔍 Checking app health..."
+          sleep 10
+          curl -f http://localhost:5000/health || echo "⚠️ Health check failed"
+
+          echo ""
+          echo "📝 Recent logs:"
+          docker-compose logs --tail=20 app
+
+    - name: Cleanup old resources
       uses: appleboy/ssh-action@v1.0.3
       with:
         host: ${{ secrets.SERVER_HOST }}
@@ -202,12 +158,7 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         script: |
-          # 최근 5개의 백업만 유지
-          cd /home/ubuntu
-          ls -dt facereview-backup-* 2>/dev/null | tail -n +6 | xargs rm -rf
-
-          # 사용하지 않는 Docker 이미지 정리
+          echo "🧹 Cleaning up old Docker resources..."
           docker image prune -f
-
-          echo "🧹 Cleanup completed"
+          echo "✅ Cleanup completed"
       continue-on-error: true
