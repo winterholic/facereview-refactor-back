@@ -139,7 +139,7 @@ jobs:
           cd ${{ env.DEPLOY_PATH }}
 
           echo "📊 Checking service status..."
-          docker-compose ps
+          docker compose ps
 
           echo ""
           echo "🔍 Checking app health..."
@@ -148,7 +148,7 @@ jobs:
 
           echo ""
           echo "📝 Recent logs:"
-          docker-compose logs --tail=20 app
+          docker compose logs --tail=20 app
 
     - name: Cleanup old resources
       uses: appleboy/ssh-action@v1.0.3

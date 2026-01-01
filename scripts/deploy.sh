@@ -30,15 +30,15 @@ echo -e "${GREEN}✓${NC} $COMPOSE_FILE 파일 확인됨"
 
 echo ""
 echo -e "${BLUE}[1/5]${NC} Docker 이미지 빌드 중..."
-docker-compose build --no-cache app
+docker compose build --no-cache app
 
 echo ""
 echo -e "${BLUE}[2/5]${NC} 기존 컨테이너 중지 중..."
-docker-compose down --remove-orphans
+docker compose down --remove-orphans
 
 echo ""
 echo -e "${BLUE}[3/5]${NC} 새 컨테이너 시작 중..."
-docker-compose up -d
+docker compose up -d
 
 echo ""
 echo -e "${BLUE}[4/5]${NC} 헬스체크 진행 중..."
@@ -46,7 +46,7 @@ MAX_RETRIES=30
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    if docker-compose ps | grep -q "facereview-app.*Up"; then
+    if docker compose ps | grep -q "facereview-app.*Up"; then
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo "000")
 
         if [ "$HTTP_CODE" == "200" ]; then
@@ -61,8 +61,8 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
         echo -e "${RED}✗${NC} 헬스체크 실패! 배포를 중단합니다."
         echo -e "\n${RED}컨테이너 로그:${NC}"
-        docker-compose logs --tail 50 app
-        docker-compose down
+        docker compose logs --tail 50 app
+        docker compose down
         exit 1
     fi
 
@@ -83,15 +83,15 @@ echo -e "배포 시간: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
 echo -e "${BLUE}실행 중인 서비스:${NC}"
-docker-compose ps
+docker compose ps
 
 echo ""
 echo -e "${YELLOW}유용한 명령어:${NC}"
-echo -e "  로그 확인:        docker-compose logs -f app"
-echo -e "  서비스 재시작:    docker-compose restart app"
-echo -e "  서비스 중지:      docker-compose stop"
-echo -e "  서비스 시작:      docker-compose start"
-echo -e "  전체 중지:        docker-compose down"
+echo -e "  로그 확인:        docker compose logs -f app"
+echo -e "  서비스 재시작:    docker compose restart app"
+echo -e "  서비스 중지:      docker compose stop"
+echo -e "  서비스 시작:      docker compose start"
+echo -e "  전체 중지:        docker compose down"
 echo ""
 
 exit 0

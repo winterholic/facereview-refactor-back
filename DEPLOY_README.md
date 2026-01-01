@@ -112,39 +112,39 @@ LOG_LEVEL=INFO
 ### 서비스 관리
 ```bash
 # 모든 서비스 시작
-docker-compose up -d
+docker compose up -d
 
 # 모든 서비스 중지
-docker-compose stop
+docker compose stop
 
 # 모든 서비스 재시작
-docker-compose restart
+docker compose restart
 
 # 특정 서비스만 재시작
-docker-compose restart app
+docker compose restart app
 
 # 모든 서비스 중지 및 제거
-docker-compose down
+docker compose down
 ```
 
 ### 로그 확인
 ```bash
 # 전체 로그 실시간 확인
-docker-compose logs -f
+docker compose logs -f
 
 # 특정 서비스 로그 확인
-docker-compose logs -f app
-docker-compose logs -f celery-worker
-docker-compose logs -f kafka-consumer
+docker compose logs -f app
+docker compose logs -f celery-worker
+docker compose logs -f kafka-consumer
 
 # 최근 100줄만 확인
-docker-compose logs --tail=100 app
+docker compose logs --tail=100 app
 ```
 
 ### 서비스 상태 확인
 ```bash
 # 실행 중인 서비스 확인
-docker-compose ps
+docker compose ps
 
 # 컨테이너 리소스 사용량
 docker stats facereview-app
@@ -153,10 +153,10 @@ docker stats facereview-app
 ### 이미지 재빌드
 ```bash
 # 캐시 없이 이미지 재빌드
-docker-compose build --no-cache app
+docker compose build --no-cache app
 
 # 재빌드 후 재시작
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ## 🔍 트러블슈팅
@@ -164,10 +164,10 @@ docker-compose up -d --build
 ### 서비스가 시작되지 않는 경우
 ```bash
 # 로그 확인
-docker-compose logs app
+docker compose logs app
 
 # 컨테이너 재시작
-docker-compose restart app
+docker compose restart app
 ```
 
 ### DB 연결 실패
