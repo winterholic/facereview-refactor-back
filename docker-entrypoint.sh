@@ -14,7 +14,7 @@ exec gunicorn \
     --timeout 120 \
     --max-requests 1000 \
     --max-requests-jitter 100 \
-    --access-logfile /app/logs/access.log \
-    --error-logfile /app/logs/error.log \
+    --access-logfile - \
+    --error-logfile - \
     --log-level info \
     "run:app"

@@ -134,3 +134,30 @@ def send_video_event(event_type: str, video_id: str, user_id: str, data: Dict[st
     }
 
     return kafka_producer.send_event(topic, event_data, key=video_id)
+
+
+def send_watch_frame_event(
+    video_view_log_id: str,
+    user_id: str,
+    video_id: str,
+    youtube_running_time: int,
+    emotion_percentages: Dict[str, float],
+    most_emotion: str
+) -> bool:
+    from flask import current_app
+    from datetime import datetime
+
+    topic = current_app.config.get('KAFKA_TOPIC_WATCH_FRAME', 'watch-frame-event')
+
+    event_data = {
+        'event_type': 'watch_frame',
+        'video_view_log_id': video_view_log_id,
+        'user_id': user_id,
+        'video_id': video_id,
+        'youtube_running_time': youtube_running_time,
+        'emotion_percentages': emotion_percentages,
+        'most_emotion': most_emotion,
+        'timestamp': datetime.utcnow().isoformat()
+    }
+
+    return kafka_producer.send_event_async(topic, event_data, key=video_view_log_id)

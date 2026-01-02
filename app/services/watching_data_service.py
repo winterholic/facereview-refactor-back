@@ -13,7 +13,7 @@ logger = get_logger('watching_data_service')
 
 class WatchingDataService:
     @staticmethod
-    def save_watching_data(video_view_log_id: str, client_info_dict: Dict = None):
+    def save_watching_data(video_view_log_id: str, duration: int = None, client_info_dict: Dict = None):
         cache = WatchingDataCache()
         cached_data = cache.remove_watching_data(video_view_log_id)
 
@@ -24,6 +24,7 @@ class WatchingDataService:
         user_id = cached_data['user_id']
         video_id = cached_data['video_id']
         frames = cached_data['frames']
+        video_duration = duration or cached_data.get('duration')
 
         if not frames:
             logger.info(f"No frame data for {video_view_log_id}")
@@ -35,7 +36,7 @@ class WatchingDataService:
         timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
 
         emotion_stats = WatchingDataService._calculate_emotion_statistics(frames)
-        completion_rate = WatchingDataService._calculate_completion_rate(frames, video_id)
+        completion_rate = WatchingDataService._calculate_completion_rate(frames, video_duration)
 
         emotion_percentages = EmotionPercentages(
             neutral=emotion_stats['emotion_percentages']['neutral'],
@@ -137,10 +138,23 @@ class WatchingDataService:
         }
 
     @staticmethod
-    def _calculate_completion_rate(frames: List[Dict], video_id: str) -> float:
+    def _calculate_completion_rate(frames: List[Dict], duration: int = None) -> float:
         if not frames:
             return 0.0
-        return min(1.0, len(frames) / 1000.0)
+
+        if not duration:
+            #NOTE: duration이 없으면 기존 로직 사용 (1000개 기준)
+            return min(1.0, len(frames) / 1000.0)
+
+        #NOTE: 시청 완료율 계산: (실제 프레임 개수 / 최대 프레임 개수)
+        #NOTE: 0.1초(100ms) 단위로 프레임 전송 → 최대 프레임 개수 = duration * 10
+        max_frame_count = duration * 10
+        actual_frame_count = len(frames)
+
+        completion_rate = actual_frame_count / max_frame_count if max_frame_count > 0 else 0.0
+
+        #NOTE: 100%를 초과할 수 없음 (유저가 반복 재생할 경우 방지)
+        return min(1.0, completion_rate)
 
     @staticmethod
     def _update_timeline_emotion_count(

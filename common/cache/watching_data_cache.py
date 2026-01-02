@@ -18,7 +18,8 @@ class WatchingDataCache:
         self,
         video_view_log_id: str,
         user_id: str,
-        video_id: str
+        video_id: str,
+        duration: int = None
     ):
 
         with self._lock:
@@ -26,6 +27,7 @@ class WatchingDataCache:
                 self._cache[video_view_log_id] = {
                     'user_id': user_id,
                     'video_id': video_id,
+                    'duration': duration,
                     'frames': [],
                     'created_at': datetime.utcnow()
                 }

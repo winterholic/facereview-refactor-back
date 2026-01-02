@@ -37,22 +37,36 @@ def main():
 
     # Consumer 생성 및 초기화
     from common.utils.kafka_consumer import (
-        create_consumer_for_user_events,
-        handle_user_event
+        FacereviewKafkaConsumer,
+        handle_user_event,
+        handle_watch_frame_event
     )
 
-    consumer = create_consumer_for_user_events(
+    #NOTE: 여러 토픽을 구독하는 통합 Consumer
+    topics = ['user-event', 'watch-frame-event']
+    consumer = FacereviewKafkaConsumer(
         bootstrap_servers=bootstrap_servers,
-        group_id=group_id
+        group_id=group_id,
+        topics=topics
     )
 
     if not consumer.initialize():
         logger.error("Failed to initialize Kafka Consumer")
         sys.exit(1)
 
+    #NOTE: 토픽에 따라 다른 핸들러 호출
+    def unified_handler(topic: str, event_data: dict):
+        if topic == 'user-event':
+            handle_user_event(topic, event_data)
+        elif topic == 'watch-frame-event':
+            handle_watch_frame_event(topic, event_data)
+        else:
+            logger.warning(f"Unknown topic: {topic}")
+
     try:
-        logger.info("Kafka Consumer is ready. Waiting for messages...")
-        consumer.consume(handle_user_event)
+        logger.info(f"Kafka Consumer is ready. Subscribed topics: {topics}")
+        logger.info("Waiting for messages...")
+        consumer.consume(unified_handler)
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received. Shutting down...")
         consumer.stop()

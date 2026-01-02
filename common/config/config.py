@@ -37,6 +37,7 @@ class Config:
     KAFKA_CLIENT_ID = os.getenv("KAFKA_CLIENT_ID", "facereview-api")
     KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "facereview-consumer")
     KAFKA_TOPIC_USER_EVENT = os.getenv("KAFKA_TOPIC_USER_EVENT", "user-event")
+    KAFKA_TOPIC_WATCH_FRAME = os.getenv("KAFKA_TOPIC_WATCH_FRAME", "watch-frame-event")
 
     SOCKETIO_MESSAGE_QUEUE = os.getenv('SOCKETIO_MESSAGE_QUEUE')
 

@@ -5,6 +5,7 @@ from common.cache.watching_data_cache import WatchingDataCache
 from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 from common.utils.logging_utils import get_logger
+from common.utils.kafka_producer import send_watch_frame_event
 
 logger = get_logger('socket')
 
@@ -24,47 +25,84 @@ def get_emotion_analyzer():
     return _emotion_analyzer
 
 
-@socketio.on('connect', namespace='/watching')
-def handle_connect():
+# NOTE : socket 연결 테스트용 이벤트(단순 테스트용)
+@socketio.on('connect')
+def handle_connect(message):
     logger.info(f"클라이언트 연결됨: {request.sid}")
-    emit('connected', {'status': 'success', 'message': 'Connected to watching server'})
 
+    # NOTE : emit 대신 return 사용
+    # emit('connected', {'status': 'success', 'message': '서버에 연결되었습니다.'})
+    return {
+        'send_message' : message.message,
+        'sid': request.sid,
+        'status': 'success',
+        'message': '서버에 연결완료 되었습니다.'
+    }
 
-@socketio.on('init_watching', namespace='/watching')
-def handle_init_watching(data):
+# NOTE : 소켓 연결 전 테스트용 socket 이벤트(처음에 페이지 진입하면 한번 쏴보는 용도)
+@socketio.on('init_watching')
+def handle_init_watching(message):
     try:
-        video_view_log_id = data.get('video_view_log_id')
-        user_id = data.get('user_id')
-        video_id = data.get('video_id')
+        video_view_log_id = message.get('video_view_log_id')
+        user_id = message.get('user_id')
+        video_id = message.get('video_id')
+        duration = message.get('duration')
 
-        if not all([video_view_log_id, user_id, video_id]):
-            emit('error', {'status': 'error', 'message': 'Missing required fields'})
-            return
+        if not all([video_view_log_id, user_id, video_id, duration]):
+
+            # NOTE : emit 대신 return 사용
+            # emit('error', {'status': 'error', 'message': 'Missing required fields'})
+
+            return {
+                'status': 'error',
+                'message': 'Missing required fields'
+            }
 
         watching_cache.init_watching_data(
             video_view_log_id=video_view_log_id,
             user_id=user_id,
-            video_id=video_id
+            video_id=video_id,
+            duration=duration
         )
 
         logger.info(f"시청 초기화 완료: {video_view_log_id}")
-        emit('init_success', {'status': 'success', 'message': 'Watching initialized'})
+
+        # NOTE : emit 대신 return 사용
+        # emit('init_success', {'status': 'success', 'message': 'Watching initialized'})
+
+        return {
+            'status': 'success',
+            'message': 'Watching initialized'
+        }
 
     except Exception as e:
         logger.error(f"시청 초기화 중 오류 발생: {e}")
-        emit('error', {'status': 'error', 'message': str(e)})
 
+        # NOTE : emit 대신 return 사용
+        # emit('error', {'status': 'error', 'message': str(e)})
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
-@socketio.on('watch_frame', namespace='/watching')
-def handle_watch_frame(data):
+# NOTE : frame_data 보내는 socket 이벤트
+@socketio.on('watch_frame')
+def handle_watch_frame(message):
     try:
-        video_view_log_id = data.get('video_view_log_id')
-        millisecond = data.get('millisecond')
-        frame_data = data.get('frame_data')
+        video_view_log_id = message.get('video_view_log_id')
+        youtube_running_time = message.get('youtube_running_time')
+        frame_data = message.get('frame_data')
+        duration = message.get('duration')
 
-        if not all([video_view_log_id, millisecond is not None, frame_data]):
-            emit('error', {'status': 'error', 'message': 'Missing required fields'})
-            return
+        if not all([video_view_log_id, youtube_running_time, duration is not None, frame_data]):
+
+            # NOTE : emit 대신 return 사용
+            # emit('error', {'status': 'error', 'message': 'Missing required fields'})
+
+            return {
+                'status': 'error',
+                'message': 'Missing required fields'
+            }
 
         user_emotion = get_emotion_analyzer().analyze_emotion(frame_data)
 
@@ -78,65 +116,111 @@ def handle_watch_frame(data):
 
         watching_cache.add_frame_data(
             video_view_log_id=video_view_log_id,
-            millisecond=millisecond,
+            youtube_running_time=youtube_running_time,
             emotion_percentages=emotion_percentages,
             most_emotion=user_emotion['most_emotion']
         )
 
-        average_emotion = _get_average_emotion_at_time(video_view_log_id, millisecond)
+        #NOTE: Kafka로 프레임 데이터 백업 전송 (비동기)
+        cached_data = watching_cache.get_watching_data(video_view_log_id)
+        if cached_data:
+            send_watch_frame_event(
+                video_view_log_id=video_view_log_id,
+                user_id=cached_data['user_id'],
+                video_id=cached_data['video_id'],
+                youtube_running_time=youtube_running_time,
+                emotion_percentages=emotion_percentages,
+                most_emotion=user_emotion['most_emotion']
+            )
+
+        average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
         response = {
-            'millisecond': millisecond,
+            'millisecond': youtube_running_time,
             'user_emotion': user_emotion,
             'average_emotion': average_emotion
         }
 
-        emit('frame_analyzed', response)
+        # NOTE : emit 대신 return 사용
+        # emit('frame_analyzed', response)
+
+        return {
+            'status': 'success',
+            'message': 'Frame analyzed',
+            'response': response
+        }
 
     except Exception as e:
         logger.error(f"프레임 분석 중 오류 발생: {e}")
-        emit('error', {'status': 'error', 'message': str(e)})
+
+        # NOTE : emit 대신 return 사용
+        # emit('error', {'status': 'error', 'message': str(e)})
+
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
 
-@socketio.on('disconnect', namespace='/watching')
-def handle_disconnect():
+# NOTE : 그냥 disconnect 테스트용 socket 이벤트
+@socketio.on('disconnect')
+def handle_disconnect(message):
     logger.info(f"클라이언트 연결 해제됨: {request.sid}")
+    # NOTE : emit 대신 return 사용
+    return {
+        'send_message' : message.message,
+        'sid': request.sid,
+        'status': 'success',
+        'message': '서버 연결이 종료 되었습니다.'
+    }
 
-    # 비동기로 데이터 저장 (사용자는 바로 응답 받음)
-    # Thread를 사용하여 백그라운드에서 처리
-    # 주의: Flask app context가 필요하므로 app을 전달
-    # 실제로는 Celery 같은 task queue를 사용하는 것이 더 좋음
-    # 여기서는 간단히 Thread로 구현
 
-    # TODO: 실제 운영 환경에서는 Celery나 RQ 같은 task queue 사용 권장
-
-
-@socketio.on('end_watching', namespace='/watching')
-def handle_end_watching(data):
+# NOTE : emit 대신 return 사용
+@socketio.on('end_watching')
+def handle_end_watching(message):
     try:
-        video_view_log_id = data.get('video_view_log_id')
-        client_info = data.get('client_info', {})
+        video_view_log_id = message.get('video_view_log_id')
+        duration = message.get('duration')
+        client_info = message.get('client_info', {})
 
         if not video_view_log_id:
-            emit('error', {'status': 'error', 'message': 'Missing video_view_log_id'})
-            return
+            # NOTE : emit 대신 return 사용
+            # emit('error', {'status': 'error', 'message': 'Missing video_view_log_id'})
+
+            return {
+                'status': 'error',
+                'message': 'Missing video_view_log_id'
+            }
 
         #NOTE: Celery task를 비동기로 실행
         task = save_watching_data_task.delay(
             video_view_log_id=video_view_log_id,
+            duration=duration,
             client_info=client_info
         )
 
         logger.info(f"시청 종료: {video_view_log_id} (Celery task ID: {task.id})")
-        emit('end_success', {
+        # NOTE : emit 대신 return 사용
+        # emit('end_success', {
+        #     'status': 'success',
+        #     'message': 'Watching data is being saved'
+        # })
+
+        return {
             'status': 'success',
-            'message': 'Watching data is being saved',
-            'task_id': task.id
-        })
+            'message': 'Watching data is being saved'
+        }
 
     except Exception as e:
         logger.error(f"시청 종료 중 오류 발생: {e}")
-        emit('error', {'status': 'error', 'message': str(e)})
+
+        # NOTE : emit 대신 return 사용
+        # emit('error', {'status': 'error', 'message': str(e)})
+
+        return {
+            'status': 'error',
+            'message': str(e)
+        }
 
 
 def _get_average_emotion_at_time(video_view_log_id: str, millisecond: int) -> dict:

@@ -151,3 +151,56 @@ def create_consumer_for_video_events(bootstrap_servers: str, group_id: str) -> F
         topics=['video-event']
     )
     return consumer
+
+
+def handle_watch_frame_event(topic: str, event_data: dict):
+    try:
+        event_type = event_data.get('event_type')
+        if event_type != 'watch_frame':
+            logger.warning(f"Invalid event type: {event_type}")
+            return
+
+        video_view_log_id = event_data.get('video_view_log_id')
+        user_id = event_data.get('user_id')
+        video_id = event_data.get('video_id')
+        youtube_running_time = event_data.get('youtube_running_time')
+        emotion_percentages = event_data.get('emotion_percentages')
+        most_emotion = event_data.get('most_emotion')
+        timestamp = event_data.get('timestamp')
+
+        logger.info(f"Processing watch_frame backup: {video_view_log_id} at {youtube_running_time}ms")
+
+        #NOTE: Kafka에서 받은 데이터를 MongoDB 백업 컬렉션에 저장
+        from flask import current_app
+        from common.extensions import mongo_client
+        from datetime import datetime
+
+        mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
+        backup_collection = mongo_db['watch_frame_backup']
+
+        backup_document = {
+            'video_view_log_id': video_view_log_id,
+            'user_id': user_id,
+            'video_id': video_id,
+            'youtube_running_time': youtube_running_time,
+            'emotion_percentages': emotion_percentages,
+            'most_emotion': most_emotion,
+            'timestamp': timestamp,
+            'processed': False,
+            'created_at': datetime.utcnow()
+        }
+
+        backup_collection.insert_one(backup_document)
+        logger.info(f"Saved watch_frame backup to MongoDB: {video_view_log_id}")
+
+    except Exception as e:
+        logger.error(f"Error handling watch_frame event: {e}")
+
+
+def create_consumer_for_watch_frame_events(bootstrap_servers: str, group_id: str) -> FacereviewKafkaConsumer:
+    consumer = FacereviewKafkaConsumer(
+        bootstrap_servers=bootstrap_servers,
+        group_id=group_id,
+        topics=['watch-frame-event']
+    )
+    return consumer
