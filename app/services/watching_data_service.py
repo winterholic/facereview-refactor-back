@@ -57,11 +57,11 @@ class WatchingDataService:
         most_emotion_timeline = {}
         emotion_score_timeline = {}
         for frame in frames:
-            ms_key = str(frame['millisecond'])
-            most_emotion_timeline[ms_key] = frame['most_emotion']
+            time_key = str(frame['youtube_running_time'])
+            most_emotion_timeline[time_key] = frame['most_emotion']
 
             emotion_percentages_dict = frame['emotion_percentages']
-            emotion_score_timeline[ms_key] = [
+            emotion_score_timeline[time_key] = [
                 emotion_percentages_dict.get('neutral', 0.0),
                 emotion_percentages_dict.get('happy', 0.0),
                 emotion_percentages_dict.get('surprise', 0.0),
@@ -164,12 +164,12 @@ class WatchingDataService:
     ):
         try:
             for frame in frames:
-                millisecond = frame['millisecond']
+                youtube_running_time = frame['youtube_running_time']
                 most_emotion = frame['most_emotion']
 
                 timeline_count_repo.increment_emotion(
                     video_id=video_id,
-                    millisecond=millisecond,
+                    youtube_running_time=youtube_running_time,
                     emotion=most_emotion
                 )
 

@@ -1,11 +1,12 @@
 from flask import request, current_app
 from flask_socketio import emit
-from common.extensions import socketio, mongo_client
+from common.extensions import socketio, mongo_client, redis_client
 from common.cache.watching_data_cache import WatchingDataCache
 from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 from common.utils.logging_utils import get_logger
 from common.utils.kafka_producer import send_watch_frame_event
+import json
 
 logger = get_logger('socket')
 
@@ -64,6 +65,9 @@ def handle_init_watching(message):
             video_id=video_id,
             duration=duration
         )
+
+        #NOTE: Redis에 타임라인 평균 감정 데이터 미리 캐싱 (3시간 TTL)
+        _cache_timeline_emotion_data(video_view_log_id, video_id)
 
         logger.info(f"시청 초기화 완료: {video_view_log_id}")
 
@@ -136,7 +140,7 @@ def handle_watch_frame(message):
         average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
         response = {
-            'millisecond': youtube_running_time,
+            'youtube_running_time': youtube_running_time,
             'user_emotion': user_emotion,
             'average_emotion': average_emotion
         }
@@ -199,6 +203,9 @@ def handle_end_watching(message):
             client_info=client_info
         )
 
+        #NOTE: 시청 종료 시 Redis 타임라인 캐시 삭제 (세션 종료)
+        _delete_timeline_cache(video_view_log_id)
+
         logger.info(f"시청 종료: {video_view_log_id} (Celery task ID: {task.id})")
         # NOTE : emit 대신 return 사용
         # emit('end_success', {
@@ -223,7 +230,7 @@ def handle_end_watching(message):
         }
 
 
-def _get_average_emotion_at_time(video_view_log_id: str, millisecond: int) -> dict:
+def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: int) -> dict:
     try:
         cached_data = watching_cache.get_watching_data(video_view_log_id)
         if not cached_data:
@@ -231,6 +238,12 @@ def _get_average_emotion_at_time(video_view_log_id: str, millisecond: int) -> di
 
         video_id = cached_data['video_id']
 
+        #NOTE: 먼저 Redis에서 조회 (빠름)
+        redis_emotion_data = _get_timeline_emotion_from_redis(video_view_log_id, youtube_running_time)
+        if redis_emotion_data:
+            return redis_emotion_data
+
+        #NOTE: Redis에 없으면 MongoDB 조회 (fallback)
         mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
         timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
 
@@ -239,7 +252,7 @@ def _get_average_emotion_at_time(video_view_log_id: str, millisecond: int) -> di
         if not timeline_count:
             return _get_default_emotion()
 
-        emotion_percentages = timeline_count.get_emotion_percentages_at_time(millisecond)
+        emotion_percentages = timeline_count.get_emotion_percentages_at_time(youtube_running_time)
 
         if not emotion_percentages:
             return _get_default_emotion()
@@ -271,3 +284,91 @@ def _get_default_emotion() -> dict:
         'angry': 0.0,
         'most_emotion': 'neutral'
     }
+
+
+def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
+    try:
+        redis_key = f"facereview:session:{video_view_log_id}:timeline"
+
+        #NOTE: 이미 Redis에 캐싱되어 있으면 스킵
+        if redis_client and redis_client.exists(redis_key):
+            logger.debug(f"타임라인 데이터가 이미 Redis에 캐싱되어 있음: {video_view_log_id}")
+            return
+
+        #NOTE: MongoDB에서 타임라인 데이터 조회
+        mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
+        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
+        timeline_count = timeline_count_repo.find_by_video_id(video_id)
+
+        if not timeline_count:
+            logger.debug(f"타임라인 데이터 없음: {video_id}")
+            return
+
+        #NOTE: 모든 타임라인 데이터를 딕셔너리로 변환
+        timeline_data = {}
+        for time_key, counts in timeline_count.counts.items():
+            total = sum(counts)
+            if total > 0:
+                emotion_percentages = {
+                    label: round(count / total, 3)
+                    for label, count in zip(timeline_count.emotion_labels, counts)
+                }
+
+                emotion_data = {
+                    'neutral': round(emotion_percentages['neutral'] * 100, 2),
+                    'happy': round(emotion_percentages['happy'] * 100, 2),
+                    'surprise': round(emotion_percentages['surprise'] * 100, 2),
+                    'sad': round(emotion_percentages['sad'] * 100, 2),
+                    'angry': round(emotion_percentages['angry'] * 100, 2)
+                }
+
+                most_emotion = max(emotion_data, key=emotion_data.get)
+                emotion_data['most_emotion'] = most_emotion
+
+                timeline_data[time_key] = emotion_data
+
+        #NOTE: Redis에 저장 (TTL: 3시간 = 10800초)
+        if redis_client and timeline_data:
+            redis_client.setex(
+                redis_key,
+                10800,  # 3시간
+                json.dumps(timeline_data)
+            )
+            logger.info(f"타임라인 데이터 Redis 캐싱 완료: {video_view_log_id} ({len(timeline_data)}개 타임스탬프)")
+
+    except Exception as e:
+        logger.error(f"타임라인 데이터 캐싱 중 오류 발생: {e}")
+
+
+def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_time: int) -> dict:
+    try:
+        redis_key = f"facereview:session:{video_view_log_id}:timeline"
+
+        if not redis_client:
+            return None
+
+        #NOTE: Redis에서 타임라인 데이터 조회
+        cached_data = redis_client.get(redis_key)
+        if not cached_data:
+            return None
+
+        timeline_data = json.loads(cached_data)
+        time_key = str(youtube_running_time)
+
+        return timeline_data.get(time_key)
+
+    except Exception as e:
+        logger.error(f"Redis 타임라인 조회 중 오류 발생: {e}")
+        return None
+
+
+def _delete_timeline_cache(video_view_log_id: str):
+    try:
+        redis_key = f"facereview:session:{video_view_log_id}:timeline"
+
+        if redis_client:
+            redis_client.delete(redis_key)
+            logger.debug(f"Redis 타임라인 캐시 삭제: {video_view_log_id}")
+
+    except Exception as e:
+        logger.error(f"Redis 캐시 삭제 중 오류 발생: {e}")

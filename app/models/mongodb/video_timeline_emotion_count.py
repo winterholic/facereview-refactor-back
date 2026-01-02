@@ -33,25 +33,25 @@ class VideoTimelineEmotionCount:
             counts=data.get('counts', {})
         )
 
-    def increment_emotion_at_time(self, millisecond: int, emotion: str):
-        ms_key = str(millisecond)
+    def increment_emotion_at_time(self, youtube_running_time: int, emotion: str):
+        time_key = str(youtube_running_time)
 
-        if ms_key not in self.counts:
-            self.counts[ms_key] = [0, 0, 0, 0, 0]
+        if time_key not in self.counts:
+            self.counts[time_key] = [0, 0, 0, 0, 0]
 
         try:
             emotion_index = self.emotion_labels.index(emotion)
-            self.counts[ms_key][emotion_index] += 1
+            self.counts[time_key][emotion_index] += 1
         except ValueError:
             raise ValueError(f"Invalid emotion: {emotion}")
 
-    def get_dominant_emotion_at_time(self, millisecond: int) -> Optional[str]:
-        ms_key = str(millisecond)
+    def get_dominant_emotion_at_time(self, youtube_running_time: int) -> Optional[str]:
+        time_key = str(youtube_running_time)
 
-        if ms_key not in self.counts:
+        if time_key not in self.counts:
             return None
 
-        counts = self.counts[ms_key]
+        counts = self.counts[time_key]
         max_count = max(counts)
 
         if max_count == 0:
@@ -60,13 +60,13 @@ class VideoTimelineEmotionCount:
         max_index = counts.index(max_count)
         return self.emotion_labels[max_index]
 
-    def get_emotion_percentages_at_time(self, millisecond: int) -> Optional[Dict[str, float]]:
-        ms_key = str(millisecond)
+    def get_emotion_percentages_at_time(self, youtube_running_time: int) -> Optional[Dict[str, float]]:
+        time_key = str(youtube_running_time)
 
-        if ms_key not in self.counts:
+        if time_key not in self.counts:
             return None
 
-        counts = self.counts[ms_key]
+        counts = self.counts[time_key]
         total = sum(counts)
 
         if total == 0:
@@ -123,15 +123,15 @@ class VideoTimelineEmotionCountRepository:
 
         return compensation_data
 
-    def increment_emotion(self, video_id: str, millisecond: int, emotion: str):
+    def increment_emotion(self, video_id: str, youtube_running_time: int, emotion: str):
         emotion_labels = ["neutral", "happy", "surprise", "sad", "angry"]
         try:
             emotion_index = emotion_labels.index(emotion)
         except ValueError:
             raise ValueError(f"Invalid emotion: {emotion}")
 
-        ms_key = str(millisecond)
-        field_path = f"counts.{ms_key}.{emotion_index}"
+        time_key = str(youtube_running_time)
+        field_path = f"counts.{time_key}.{emotion_index}"
 
         self.collection.update_one(
             {'video_id': video_id},

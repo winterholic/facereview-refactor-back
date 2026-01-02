@@ -35,7 +35,7 @@ class WatchingDataCache:
     def add_frame_data(
         self,
         video_view_log_id: str,
-        millisecond: int,
+        youtube_running_time: int,
         emotion_percentages: Dict[str, float],
         most_emotion: str
     ):
@@ -43,16 +43,15 @@ class WatchingDataCache:
         with self._lock:
             if video_view_log_id in self._cache:
                 frame_data = {
-                    'millisecond': millisecond,
+                    'youtube_running_time': youtube_running_time,
                     'emotion_percentages': emotion_percentages,
                     'most_emotion': most_emotion
                 }
                 self._cache[video_view_log_id]['frames'].append(frame_data)
 
     def get_watching_data(self, video_view_log_id: str) -> Optional[Dict]:
-
-        with self._lock:
-            return self._cache.get(video_view_log_id)
+        #NOTE: 읽기 전용이므로 락 불필요
+        return self._cache.get(video_view_log_id)
 
     def remove_watching_data(self, video_view_log_id: str) -> Optional[Dict]:
         with self._lock:
@@ -63,5 +62,5 @@ class WatchingDataCache:
             self._cache.clear()
 
     def get_cache_size(self) -> int:
-        with self._lock:
-            return len(self._cache)
+        #NOTE: 읽기 전용이므로 락 불필요
+        return len(self._cache)

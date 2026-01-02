@@ -101,10 +101,10 @@ class YoutubeWatchingData:
             )
         )
 
-    def add_emotion_at_time(self, millisecond: int, emotion: str, scores: list):
-        ms_key = str(millisecond)
-        self.most_emotion_timeline[ms_key] = emotion
-        self.emotion_score_timeline[ms_key] = scores
+    def add_emotion_at_time(self, youtube_running_time: int, emotion: str, scores: list):
+        time_key = str(youtube_running_time)
+        self.most_emotion_timeline[time_key] = emotion
+        self.emotion_score_timeline[time_key] = scores
 
 
 class YoutubeWatchingDataRepository:
