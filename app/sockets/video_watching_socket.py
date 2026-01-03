@@ -34,7 +34,6 @@ def handle_connect(message):
     # NOTE : emit 대신 return 사용
     # emit('connected', {'status': 'success', 'message': '서버에 연결되었습니다.'})
     return {
-        'send_message' : message.message,
         'sid': request.sid,
         'status': 'success',
         'message': '서버에 연결완료 되었습니다.'
@@ -172,7 +171,6 @@ def handle_disconnect(message):
     logger.info(f"클라이언트 연결 해제됨: {request.sid}")
     # NOTE : emit 대신 return 사용
     return {
-        'send_message' : message.message,
         'sid': request.sid,
         'status': 'success',
         'message': '서버 연결이 종료 되었습니다.'
