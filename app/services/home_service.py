@@ -20,6 +20,13 @@ class HomeService:
 
     @staticmethod
     @transactional_readonly
+    def get_search_videos(page: int, size: int, emotion: str, keyword_type: str, keyword: str):
+        
+        return
+
+
+    @staticmethod
+    @transactional_readonly
     def get_personalized_videos(user_id: str, limit: int = 20):
         user = User.query.filter_by(user_id=user_id).first()
         if not user:
@@ -297,15 +304,26 @@ class HomeService:
             has_next=has_next
         )
 
+    #TODO : bulk_save 확인해보기
     @staticmethod
     @transactional
-    def create_user_video_recommend(user_id: str, youtube_url: str):
-        if VideoRequest.query.filter_by(youtube_url=youtube_url).first():
+    def create_user_video_recommend(user_id: str, youtube_url_list: list):
+        existing_urls = {
+            row.youtube_url
+            for row in VideoRequest.query.filter(VideoRequest.youtube_url.in_(youtube_url_list)).all()
+        }
+
+        if existing_urls.intersection(youtube_url_list):
             raise BusinessError(APIError.VIDEO_REQUEST_DUPLICATE_URL)
 
-        new_video_request = VideoRequest(
-            user_id=user_id,
-            youtube_url=youtube_url,
-            youtube_full_url="https://www.youtube.com/watch?v=" + youtube_url
-        )
-        db.session.add(new_video_request)
+        new_video_requests = [
+            VideoRequest(
+                user_id=user_id,
+                youtube_url=url,
+                youtube_full_url=f"https://www.youtube.com/watch?v={url}"
+            )
+            for url in youtube_url_list
+        ]
+
+        db.session.bulk_save_objects(new_video_requests)
+        db.session.flush()

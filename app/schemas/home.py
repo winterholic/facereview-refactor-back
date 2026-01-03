@@ -1,5 +1,39 @@
 from marshmallow import Schema, fields, validate
 
+class SearchVideoRequestSchema(Schema):
+    page = fields.Int(
+        required=True,  # 필수 조건
+        validate=validate.Range(min=1),
+        metadata={'description': '페이지 번호 (1 이상)'}
+    )
+    size = fields.Int(
+        required=True,  # 필수 조건
+        validate=validate.Range(min=1, max=100),
+        metadata={'description': '페이지 당 개수 (최대 100)'}
+    )
+    emotion = fields.String(
+        required=True,  # 필수 조건
+        metadata={'description': '감정 필터 (all, happy, sad, neutral, surprise, angry)'}
+    )
+    keyword_type = fields.String(
+        required=True,  # 필수 조건
+        metadata={'description': '검색어 타입 (all, title, channel_name)'}
+    )
+    keyword = fields.String(
+        required=True,  # 필수 조건
+        metadata={'description': '검색어'}
+    )
+
+class SearchVideoResponseSchema(Schema):
+    videos = fields.List(
+        fields.Nested(VideoResponseSchema()),
+        metadata={'description': '영상 리스트'}
+    )
+    total = fields.Int(metadata={'description': '전체 영상 개수'})
+    page = fields.Int(metadata={'description': '현재 페이지'})
+    size = fields.Int(metadata={'description': '페이지 당 개수'})
+    has_next = fields.Bool(metadata={'description': '다음 페이지 존재 여부'})
+    
 class VideoResponseSchema(Schema):
     video_id = fields.String(metadata={'description': '영상 UUID'})
     youtube_url = fields.String(metadata={'description': '유튜브 URL'})

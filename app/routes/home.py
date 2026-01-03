@@ -8,7 +8,9 @@ from app.schemas.home import (
     EmotionVideoQuerySchema,
     CategoryGroupedResponseSchema,
     VideoRecommendRequestSchema,
-    AllVideoResponseSchema
+    AllVideoResponseSchema,
+    SearchVideoResponseSchema,
+    VideoSearchRequestSchema
 )
 from app.services.home_service import HomeService
 
@@ -20,6 +22,22 @@ home_blueprint = Blueprint(
 )
 
 #TODO: 검색 API 추가 전체, 제목, 채널명
+#TODO: 논리삭제된 데이터 삭제처리 스케줄러 추가
+#TODO: 스케줄러 test용 api 추가
+
+@home_blueprint.route('/search', methods=['GET'])
+@public_route
+@home_blueprint.arguments(VideoSearchRequestSchema, location='query')
+@home_blueprint.response(200, SearchVideoResponseSchema(many=True))
+@home_blueprint.doc(security=[{"BearerAuth": []}])
+def get_search_videos():
+    page = g.args['page']
+    size = g.args['size']
+    emotion = g.args['emotion']
+    keyword_type = g.args['keyword_type']
+    keyword = g.args['keyword']
+
+    return HomeService.get_search_videos(page, size, emotion, keyword_type, keyword)
 
 @home_blueprint.route('/personalized', methods=['GET'])
 @login_required
@@ -60,9 +78,9 @@ def get_all_videos(query_args):
 @home_blueprint.doc(security=[{"BearerAuth": []}])
 def create_user_video_recommend(data):
     user_id = g.user_id
-    youtube_url = data['youtube_url']
+    youtube_url_list = data['youtube_url_list']
 
-    HomeService.create_user_video_recommend(user_id, youtube_url)
+    HomeService.create_user_video_recommend(user_id, youtube_url_list)
 
     #TODO: list화
 

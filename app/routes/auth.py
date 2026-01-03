@@ -7,8 +7,6 @@ from app.schemas.common_schema import SuccessResponseSchema
 from app.services.auth_service import AuthService
 from common.decorator.auth_decorators import login_required, public_route
 
-#TODO: tz timestamp 자료형 찾아보고 확인해보기
-
 auth_blueprint = Blueprint(
     'auth',
     __name__,
