@@ -71,7 +71,8 @@ def create_app(config_name='default'):
     db.init_app(app)
     CORS(app,
          supports_credentials=True,
-         origins=["*"],  # TODO "https://frontdomain.com", "https://admin.frontdomain.com" 이런식으로 수정필요
+         origins=["localhost:3000", "localhost:5173", "localhost:4173", "localhost:5000",
+         "https://facereview-api.winterholic.net"],  # TODO "https://frontdomain.com", "https://admin.frontdomain.com" 이런식으로 수정필요
          allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
          expose_headers=["Authorization", "Content-Type"],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
