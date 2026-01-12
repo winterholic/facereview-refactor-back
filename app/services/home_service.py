@@ -12,6 +12,7 @@ from common.extensions import db, mongo_client, mongo_db
 from common.utils.main_rec_alg import get_personalized_recommendations
 from common.utils.category_rec_alg import get_top_videos_by_category_emotion
 from app.dto.home import BaseVideoDataDto, CategoryVideoDataDto, CategoryVideoDataListDto, AllVideoDataDto
+from sqlalchemy import or_
 from bson.codec_options import CodecOptions
 from bson.binary import UuidRepresentation
 
@@ -20,9 +21,78 @@ class HomeService:
 
     @staticmethod
     @transactional_readonly
-    def get_search_videos(page: int, size: int, emotion: str, keyword_type: str, keyword: str):
-        
-        return
+    def get_search_videos(page: int, size: int, keyword_type: str, keyword: str):
+        #NOTE: Video 테이블에서 LIKE 검색
+        query = Video.query.filter_by(is_deleted=0)
+
+        if keyword_type == 'title':
+            query = query.filter(Video.title.like(f'%{keyword}%'))
+        elif keyword_type == 'channel_name':
+            query = query.filter(Video.channel_name.like(f'%{keyword}%'))
+        elif keyword_type == 'all':
+            query = query.filter(
+                or_(
+                    Video.title.like(f'%{keyword}%'),
+                    Video.channel_name.like(f'%{keyword}%')
+                )
+            )
+
+        total = query.count()
+
+        videos = query.order_by(Video.created_at.desc()).offset((page - 1) * size).limit(size).all()
+
+        if not videos:
+            return {
+                'videos': [],
+                'total': total,
+                'page': page,
+                'size': size,
+                'has_next': False
+            }
+
+        video_dist_repo = VideoDistributionRepository(mongo_db)
+        video_ids = [video.video_id for video in videos]
+        video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
+
+        video_dto_list = []
+        for video in videos:
+            video_distribution = video_stats_dict.get(video.video_id)
+
+            if not video_distribution:
+                continue
+
+            dominant_emotion = video_distribution.dominant_emotion or 'neutral'
+            emotion_averages_dict = {
+                'neutral': video_distribution.emotion_averages.neutral,
+                'happy': video_distribution.emotion_averages.happy,
+                'surprise': video_distribution.emotion_averages.surprise,
+                'sad': video_distribution.emotion_averages.sad,
+                'angry': video_distribution.emotion_averages.angry
+            }
+
+            dominant_emotion_per = round(
+                emotion_averages_dict.get(dominant_emotion, 0.0) * 100.0,
+                2
+            )
+
+            video_dto = BaseVideoDataDto(
+                video_id=video.video_id,
+                youtube_url=video.youtube_url,
+                title=video.title,
+                dominant_emotion=dominant_emotion,
+                dominant_emotion_per=dominant_emotion_per
+            )
+            video_dto_list.append(video_dto)
+
+        has_next = (page * size) < total
+
+        return {
+            'videos': video_dto_list,
+            'total': total,
+            'page': page,
+            'size': size,
+            'has_next': has_next
+        }
 
 
     @staticmethod

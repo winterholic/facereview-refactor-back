@@ -10,7 +10,7 @@ from app.schemas.home import (
     VideoRecommendRequestSchema,
     AllVideoResponseSchema,
     SearchVideoResponseSchema,
-    VideoSearchRequestSchema
+    SearchVideoRequestSchema
 )
 from app.services.home_service import HomeService
 
@@ -21,23 +21,20 @@ home_blueprint = Blueprint(
     description='홈 화면 및 영상 추천 API'
 )
 
-#TODO: 검색 API 추가 전체, 제목, 채널명
 #TODO: 논리삭제된 데이터 삭제처리 스케줄러 추가
 #TODO: 스케줄러 test용 api 추가
 
 @home_blueprint.route('/search', methods=['GET'])
 @public_route
-@home_blueprint.arguments(VideoSearchRequestSchema, location='query')
-@home_blueprint.response(200, SearchVideoResponseSchema(many=True))
-@home_blueprint.doc(security=[{"BearerAuth": []}])
-def get_search_videos():
-    page = g.args['page']
-    size = g.args['size']
-    emotion = g.args['emotion']
-    keyword_type = g.args['keyword_type']
-    keyword = g.args['keyword']
+@home_blueprint.arguments(SearchVideoRequestSchema, location='query')
+@home_blueprint.response(200, SearchVideoResponseSchema)
+def get_search_videos(query_args):
+    page = query_args['page']
+    size = query_args['size']
+    keyword_type = query_args['keyword_type']
+    keyword = query_args['keyword']
 
-    return HomeService.get_search_videos(page, size, emotion, keyword_type, keyword)
+    return HomeService.get_search_videos(page, size, keyword_type, keyword)
 
 @home_blueprint.route('/personalized', methods=['GET'])
 @login_required
