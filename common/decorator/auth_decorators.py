@@ -48,7 +48,6 @@ def login_optional(f):
         if redis_client and redis_client.exists(f"facereview:blacklist:{token}"):
             raise BusinessError(APIError.AUTH_INVALID_TOKEN)
 
-        #NOTE: 토큰이 있는데 유효하지 않으면 에러를 던져야 함 (해킹 시도 방지)
         payload = decode_token(token)
 
         if payload.get('type') != 'access':

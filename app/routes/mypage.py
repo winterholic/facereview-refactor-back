@@ -16,8 +16,6 @@ from app.schemas.mypage import (
 from app.services.mypage_service import MypageService
 from common.decorator.auth_decorators import login_required
 
-# TODO : 프로필 이미지 변경 추후 실제이미지로도 고려
-# TODO : 탈퇴하기 추가
 
 mypage_blueprint = Blueprint(
     'mypage',

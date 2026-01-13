@@ -93,6 +93,10 @@ jobs:
         KAFKA_GROUP_ID=${{ secrets.KAFKA_GROUP_ID }}
         KAFKA_TOPIC_USER_EVENT=${{ secrets.KAFKA_TOPIC_USER_EVENT }}
 
+        SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+        SENTRY_ENVIRONMENT=production
+        SENTRY_TRACES_SAMPLE_RATE=0.1
+
         LOG_LEVEL=INFO
         EOF
 

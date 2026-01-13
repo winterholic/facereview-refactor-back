@@ -9,6 +9,11 @@ from pymongo import MongoClient
 from sqlalchemy.engine import URL
 import redis
 import logging
+import sentry_sdk
+from sentry_sdk.integrations.flask import FlaskIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.integrations.redis import RedisIntegration
+from sentry_sdk.integrations.celery import CeleryIntegration
 from common.extensions import db, socketio, api, celery
 import common.extensions as extensions
 from common.celery_app import create_celery_app
@@ -24,6 +29,22 @@ def create_app(config_name='default'):
     from common.config.config import config
     config_class = config.get(config_name, config['default'])
     app.config.from_object(config_class)
+
+    if app.config.get('SENTRY_DSN'):
+        sentry_sdk.init(
+            dsn=app.config['SENTRY_DSN'],
+            integrations=[
+                FlaskIntegration(),
+                SqlalchemyIntegration(),
+                RedisIntegration(),
+                CeleryIntegration(),
+            ],
+            environment=app.config.get('SENTRY_ENVIRONMENT', 'development'),
+            traces_sample_rate=app.config.get('SENTRY_TRACES_SAMPLE_RATE', 1.0),
+            send_default_pii=False,
+            attach_stacktrace=True,
+            before_send=lambda event, hint: event if app.config.get('FLASK_ENV') != 'development' or app.config.get('SENTRY_DSN') else None,
+        )
 
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO'))
     logger = setup_logger(app, log_level)
@@ -176,6 +197,7 @@ def create_app(config_name='default'):
     from app.routes.mypage import mypage_blueprint
     from app.routes.watch import watch_blueprint
     from app.routes.admin import admin_blueprint
+    from app.routes.test import test_blueprint
 
     api.register_blueprint(base_blueprint)
     api.register_blueprint(auth_blueprint)
@@ -183,6 +205,7 @@ def create_app(config_name='default'):
     api.register_blueprint(mypage_blueprint)
     api.register_blueprint(watch_blueprint)
     api.register_blueprint(admin_blueprint)
+    api.register_blueprint(test_blueprint)
 
     from common.exception.error_handler import register_error_handlers
     register_error_handlers(app)

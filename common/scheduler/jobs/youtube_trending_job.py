@@ -53,47 +53,59 @@ class YoutubeTrendingJob:
     def __init__(self):
         self.api_key = None
 
-    def _fetch_youtube_api(self, region_code: str = 'KR', max_results: int = 50) -> List[Dict]:
+    def _fetch_youtube_api(self, region_code: str = 'KR', max_results: int = 50, max_pages: int = 4) -> List[Dict]:
         videos = []
+        page_token = None
 
         try:
             url = 'https://www.googleapis.com/youtube/v3/videos'
-            params = {
-                'part': 'snippet,contentDetails,statistics',
-                'chart': 'mostPopular',
-                'regionCode': region_code,
-                'maxResults': max_results,
-                'key': self.api_key
-            }
 
-            response = requests.get(url, params=params)
-            response.raise_for_status()
-            data = response.json()
-
-            for item in data.get('items', []):
-                video_id = item.get('id')
-                snippet = item.get('snippet', {})
-                content_details = item.get('contentDetails', {})
-                statistics = item.get('statistics', {})
-
-                duration_iso = content_details.get('duration', 'PT0S')
-                try:
-                    duration_seconds = int(isodate.parse_duration(duration_iso).total_seconds())
-                except:
-                    duration_seconds = 0
-
-                video_info = {
-                    'youtube_id': video_id,
-                    'title': snippet.get('title', ''),
-                    'channel_name': snippet.get('channelTitle', ''),
-                    'category_id': snippet.get('categoryId', ''),
-                    'tags': snippet.get('tags', []),
-                    'description': snippet.get('description', ''),
-                    'duration': duration_seconds,
-                    'view_count': int(statistics.get('viewCount', 0)),
+            for page in range(max_pages):
+                params = {
+                    'part': 'snippet,contentDetails,statistics',
+                    'chart': 'mostPopular',
+                    'regionCode': region_code,
+                    'maxResults': max_results,
+                    'key': self.api_key
                 }
 
-                videos.append(video_info)
+                if page_token:
+                    params['pageToken'] = page_token
+
+                response = requests.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+                for item in data.get('items', []):
+                    video_id = item.get('id')
+                    snippet = item.get('snippet', {})
+                    content_details = item.get('contentDetails', {})
+                    statistics = item.get('statistics', {})
+
+                    duration_iso = content_details.get('duration', 'PT0S')
+                    try:
+                        duration_seconds = int(isodate.parse_duration(duration_iso).total_seconds())
+                    except:
+                        duration_seconds = 0
+
+                    video_info = {
+                        'youtube_id': video_id,
+                        'title': snippet.get('title', ''),
+                        'channel_name': snippet.get('channelTitle', ''),
+                        'category_id': snippet.get('categoryId', ''),
+                        'tags': snippet.get('tags', []),
+                        'description': snippet.get('description', ''),
+                        'duration': duration_seconds,
+                        'view_count': int(statistics.get('viewCount', 0)),
+                    }
+
+                    videos.append(video_info)
+
+                page_token = data.get('nextPageToken')
+                if not page_token:
+                    break
+
+                logger.info(f"YouTube API 페이지 {page + 1}/{max_pages} 완료 (현재 {len(videos)}개)")
 
         except requests.RequestException as e:
             logger.error(f"YouTube API 호출 오류: {str(e)}")
@@ -127,10 +139,12 @@ class YoutubeTrendingJob:
 
         return mapped_category
 
-    @transactional
     def execute(self):
         try:
             from app.models.video import Video
+            from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
+            from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
+            from common.extensions import mongo_db
 
             self.api_key = current_app.config.get('YOUTUBE_API_KEY')
             if not self.api_key:
@@ -139,9 +153,7 @@ class YoutubeTrendingJob:
 
             logger.info("YouTube 인기 동영상 수집 시작...")
 
-            all_videos = []
-            all_videos.extend(self._fetch_youtube_api(region_code='KR', max_results=50))
-            all_videos.extend(self._fetch_youtube_api(region_code='KR', max_results=50))
+            all_videos = self._fetch_youtube_api(region_code='KR', max_results=50, max_pages=4)
 
             if not all_videos:
                 logger.warning("가져온 동영상이 없습니다.")
@@ -149,7 +161,6 @@ class YoutubeTrendingJob:
 
             youtube_ids = [video['youtube_id'] for video in all_videos]
 
-            #NOTE: N+1 쿼리 방지 - DB에서 기존 youtube_url들을 한 번에 조회
             existing_videos = Video.query.filter(
                 Video.youtube_url.in_(youtube_ids)
             ).all()
@@ -161,7 +172,13 @@ class YoutubeTrendingJob:
             ]
 
             logger.info(f"전체 {len(all_videos)}개 중 신규 {len(new_videos)}개 발견")
+
             saved_count = 0
+            mongo_saved_count = 0
+
+            video_dist_repo = VideoDistributionRepository(mongo_db)
+            timeline_repo = VideoTimelineEmotionCountRepository(mongo_db)
+
             for video_data in new_videos:
                 try:
                     category = self._map_youtube_category(
@@ -177,12 +194,25 @@ class YoutubeTrendingJob:
                         channel_name=video_data['channel_name'][:100],
                         category=category,
                         duration=video_data['duration'],
-                        view_count=video_data['view_count'],
+                        view_count=0,
                         is_deleted=0
                     )
 
                     db.session.add(new_video)
+                    db.session.flush()
+
+                    video_distribution = VideoDistribution(
+                        video_id=new_video.video_id
+                    )
+                    video_dist_repo.upsert(video_distribution)
+
+                    timeline_emotion = VideoTimelineEmotionCount(
+                        video_id=new_video.video_id
+                    )
+                    timeline_repo.upsert(timeline_emotion)
+
                     saved_count += 1
+                    mongo_saved_count += 1
 
                 except Exception as e:
                     logger.error(f"동영상 저장 오류 ({video_data['youtube_id']}): {str(e)}")
@@ -190,8 +220,9 @@ class YoutubeTrendingJob:
 
             db.session.commit()
 
-            logger.info(f"YouTube 인기 동영상 수집 완료: {saved_count}개 저장")
+            logger.info(f"YouTube 인기 동영상 수집 완료: MySQL {saved_count}개, MongoDB {mongo_saved_count}개 저장")
 
         except Exception as e:
             db.session.rollback()
-            logger.error(f"YouTube 인기 동영상 수집 중 오류: {str(e)}")
+            logger.error(f"YouTube 인기 동영상 수집 중 오류: {str(e)}", exc_info=True)
+            raise

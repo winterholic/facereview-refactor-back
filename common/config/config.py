@@ -57,17 +57,24 @@ class Config:
 
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
+    SENTRY_DSN = os.getenv('SENTRY_DSN')
+    SENTRY_ENVIRONMENT = os.getenv('SENTRY_ENVIRONMENT', 'development')
+    SENTRY_TRACES_SAMPLE_RATE = float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '1.0'))
+
 
 class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_ECHO = True
     LOG_LEVEL = 'DEBUG'
+    SENTRY_ENVIRONMENT = 'development'
 
 
 class ProductionConfig(Config):
     DEBUG = False
     SQLALCHEMY_ECHO = False
     LOG_LEVEL = 'WARNING'
+    SENTRY_ENVIRONMENT = 'production'
+    SENTRY_TRACES_SAMPLE_RATE = 0.1
 
 
 class TestingConfig(Config):

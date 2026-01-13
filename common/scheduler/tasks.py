@@ -4,6 +4,7 @@
 - Video Distribution History 생성
 """
 
+from flask import current_app
 from common.extensions import scheduler
 from common.scheduler.jobs import YoutubeTrendingJob, VideoDistributionHistoryJob
 from common.utils.logging_utils import get_logger
@@ -41,12 +42,24 @@ def register_scheduled_tasks():
 
 
 def execute_youtube_trending_job():
-    """YouTube 인기 동영상 수집 Job 실행"""
-    job = YoutubeTrendingJob()
-    job.execute()
+    """YouTube 인기 동영상 수집 Job 실행 (Flask 앱 컨텍스트 내에서)"""
+    with scheduler.app.app_context():
+        try:
+            logger.info("YouTube 인기 동영상 수집 작업 시작")
+            job = YoutubeTrendingJob()
+            job.execute()
+            logger.info("YouTube 인기 동영상 수집 작업 완료")
+        except Exception as e:
+            logger.error(f"YouTube 인기 동영상 수집 작업 실패: {str(e)}", exc_info=True)
 
 
 def execute_video_distribution_history_job():
-    """Video Distribution History 생성 Job 실행"""
-    job = VideoDistributionHistoryJob()
-    job.execute()
+    """Video Distribution History 생성 Job 실행 (Flask 앱 컨텍스트 내에서)"""
+    with scheduler.app.app_context():
+        try:
+            logger.info("Video Distribution History 생성 작업 시작")
+            job = VideoDistributionHistoryJob()
+            job.execute()
+            logger.info("Video Distribution History 생성 작업 완료")
+        except Exception as e:
+            logger.error(f"Video Distribution History 생성 작업 실패: {str(e)}", exc_info=True)

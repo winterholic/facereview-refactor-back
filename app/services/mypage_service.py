@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from flask import current_app
 
-from common.extensions import db, mongo_client, redis_client, mongo_db
+from common.extensions import db, redis_client, mongo_db
 from common.decorator.db_decorators import transactional, transactional_readonly
 from common.exception.exceptions import BusinessError
 from common.enum.error_code import APIError
@@ -251,8 +251,7 @@ class MypageService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        db_mongo = mongo_client.get_database()
-        repo = YoutubeWatchingDataRepository(db_mongo)
+        repo = YoutubeWatchingDataRepository(mongo_db)
         collection = repo.collection
 
         watching_data_docs = collection.find({'user_id': user_id})
@@ -301,8 +300,7 @@ class MypageService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        db_mongo = mongo_client.get_database()
-        repo = YoutubeWatchingDataRepository(db_mongo)
+        repo = YoutubeWatchingDataRepository(mongo_db)
         collection = repo.collection
 
         watching_data_docs = collection.find({'user_id': user_id})
@@ -316,7 +314,7 @@ class MypageService:
             if not video:
                 continue
 
-            category = video.category.value
+            category = video.category.value if hasattr(video.category, 'value') else video.category
             if category not in category_emotions:
                 category_emotions[category] = {
                     'neutral': 0,
@@ -370,8 +368,7 @@ class MypageService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        db_mongo = mongo_client.get_database()
-        repo = YoutubeWatchingDataRepository(db_mongo)
+        repo = YoutubeWatchingDataRepository(mongo_db)
         collection = repo.collection
 
         watching_data_docs = collection.find({'user_id': user_id})
@@ -443,8 +440,7 @@ class MypageService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        db_mongo = mongo_client.get_database()
-        repo = YoutubeWatchingDataRepository(db_mongo)
+        repo = YoutubeWatchingDataRepository(mongo_db)
         collection = repo.collection
 
         watching_data_docs = list(collection.find({'user_id': user_id}))
@@ -482,7 +478,7 @@ class MypageService:
             if not video:
                 continue
 
-            category = video.category.value
+            category = video.category.value if hasattr(video.category, 'value') else video.category
             if category not in category_emotions_map:
                 category_emotions_map[category] = {
                     'neutral': 0,
@@ -522,7 +518,7 @@ class MypageService:
             video_id = doc['video_id']
             video = Video.query.filter_by(video_id=video_id, is_deleted=0).first()
             if video:
-                category = video.category.value
+                category = video.category.value if hasattr(video.category, 'value') else video.category
                 category_counts[category] = category_counts.get(category, 0) + 1
 
         most_watched_category = max(category_counts, key=category_counts.get) if category_counts else 'none'

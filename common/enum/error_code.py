@@ -1,9 +1,6 @@
 from enum import Enum
 
 class APIError(Enum):
-    """
-    (에러 코드, 기본 메시지, HTTP 상태코드)를 묶어서 정의
-    """
     # 1. 공통 에러
     INTERNAL_SERVER_ERROR = ("C001", "서버 내부 오류가 발생했습니다.", 500)
     INVALID_INPUT_VALUE  = ("C002", "입력값이 올바르지 않습니다.", 400)

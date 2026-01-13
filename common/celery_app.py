@@ -3,7 +3,10 @@ Celery Application
 Flask와 통합된 Celery 앱
 """
 
+import os
 from celery import Celery
+import sentry_sdk
+from sentry_sdk.integrations.celery import CeleryIntegration
 
 
 def create_celery_app(app=None):
@@ -16,14 +19,24 @@ def create_celery_app(app=None):
     Returns:
         Celery: Celery application instance
     """
+    sentry_dsn = os.getenv('SENTRY_DSN')
+    if sentry_dsn:
+        sentry_sdk.init(
+            dsn=sentry_dsn,
+            environment=os.getenv('SENTRY_ENVIRONMENT', 'development'),
+            traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '1.0')),
+            integrations=[CeleryIntegration()],
+            send_default_pii=False,
+            attach_stacktrace=True,
+        )
+
     celery = Celery(
         'facereview',
-        broker=None,  # config에서 설정
-        backend=None,  # config에서 설정
-        include=['common.tasks.watching_data_tasks']  # task 모듈들
+        broker=None,
+        backend=None,
+        include=['common.tasks.watching_data_tasks']
     )
 
-    # Celery 설정 로드
     from common.config.celery_config import CeleryConfig
     celery.config_from_object(CeleryConfig)
 
