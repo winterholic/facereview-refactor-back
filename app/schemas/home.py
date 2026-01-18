@@ -71,8 +71,9 @@ class CategoryRecommendVideoResponseSchema(Schema):
     video_data = fields.List(fields.Nested(CategoryGroupedResponseSchema()))
 
 class VideoRecommendRequestSchema(Schema):
-    youtube_url = fields.String(
+    youtube_url_list = fields.List(
+        fields.String(validate=validate.Length(min=1)),
         required=True,
         validate=validate.Length(min=1),
-        metadata={'description': '추천할 유튜브 URL'}
+        metadata={'description': '추천할 유튜브 URL 리스트'}
     )

@@ -79,8 +79,6 @@ def create_user_video_recommend(data):
 
     HomeService.create_user_video_recommend(user_id, youtube_url_list)
 
-    #TODO: list화
-
     return {
         "result": "success",
         'message': '영상 추천 요청이 등록되었습니다.'
