@@ -1,8 +1,8 @@
-import bcrypt
 import uuid
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from flask import current_app
+from werkzeug.security import generate_password_hash
 
 from common.extensions import db, redis_client, mongo_db
 from common.decorator.db_decorators import transactional, transactional_readonly
@@ -121,8 +121,8 @@ class MypageService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        hashed_password = bcrypt.hashpw(new_password.encode('utf-8'), bcrypt.gensalt())
-        user.password = hashed_password.decode('utf-8')
+        hashed_password = generate_password_hash(new_password)
+        user.password = hashed_password
 
         return {
             'message': '비밀번호가 변경되었습니다.'
