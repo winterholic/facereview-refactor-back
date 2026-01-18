@@ -29,10 +29,10 @@ class EmotionAnalyzer:
     def _load_model(self):
         #NOTE: TensorFlow import를 이 시점에만 수행하여 앱 시작 속도 개선
         from tensorflow import keras
+        from common.ml import MODEL_PATH
 
-        model_path = os.path.join(os.path.dirname(__file__), 'model.h5')
-        self._model = keras.models.load_model(model_path)
-        logger.info(f"Model loaded from {model_path}")
+        self._model = keras.models.load_model(MODEL_PATH)
+        logger.info(f"Model loaded from {MODEL_PATH}")
 
     def analyze_emotion(self, base64_frame_data: str) -> Dict[str, float]:
         try:
