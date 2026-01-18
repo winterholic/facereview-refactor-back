@@ -45,7 +45,7 @@ class Config:
     BASE_DIR = os.path.dirname(os.path.dirname(__file__))
     UPLOAD_FOLDER = os.path.join(BASE_DIR, 'uploads')
 
-    MODEL_PATH = '/home/winterholic/projects/services/new-facereview-model/model.h5'
+    MODEL_PATH = os.path.join(BASE_DIR, 'common', 'ml', 'model.h5')
 
     YOUTUBE_API_KEY = os.getenv('YOUTUBE_API_KEY')
 

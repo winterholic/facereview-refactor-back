@@ -126,6 +126,9 @@ jobs:
 
           mkdir -p logs uploads
 
+          # 모델 파일 복사 (git에 포함되지 않은 파일)
+          cp /home/winterholic/projects/services/new-facereview-model/model.h5 ${{ env.DEPLOY_PATH }}/common/ml/model.h5
+
           chmod +x scripts/deploy.sh
 
           ./scripts/deploy.sh

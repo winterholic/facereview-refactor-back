@@ -9,8 +9,8 @@ ML package
 
 import os
 
-# 모델 경로 (CI/CD 배포 시 덮어씌워지지 않도록 프로젝트 외부 경로 사용)
-MODEL_PATH = '/home/winterholic/projects/services/new-facereview-model/model.h5'
+# 모델 경로
+MODEL_PATH = os.path.join(os.path.dirname(__file__), 'model.h5')
 
 # 모델 로딩 함수 (Lazy loading)
 def load_model():
