@@ -11,14 +11,15 @@ logger = get_logger('watching_data_tasks')
     max_retries=3,
     default_retry_delay=60
 )
-def save_watching_data_task(self, video_view_log_id: str, duration: int = None, client_info: dict = None):
+def save_watching_data_task(self, video_view_log_id: str, duration: int = None, client_info: dict = None, cached_data: dict = None):
     try:
         logger.debug(f"Saving watching data: {video_view_log_id}")
 
         WatchingDataService.save_watching_data(
             video_view_log_id=video_view_log_id,
             duration=duration,
-            client_info_dict=client_info
+            client_info_dict=client_info,
+            cached_data=cached_data
         )
 
         logger.info(f"Successfully saved watching data: {video_view_log_id}")

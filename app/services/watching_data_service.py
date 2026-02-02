@@ -5,7 +5,6 @@ from common.extensions import mongo_client
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages, ClientInfo
 from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
-from common.cache.watching_data_cache import WatchingDataCache
 from common.utils.logging_utils import get_logger
 
 logger = get_logger('watching_data_service')
@@ -13,10 +12,7 @@ logger = get_logger('watching_data_service')
 
 class WatchingDataService:
     @staticmethod
-    def save_watching_data(video_view_log_id: str, duration: int = None, client_info_dict: Dict = None):
-        cache = WatchingDataCache()
-        cached_data = cache.remove_watching_data(video_view_log_id)
-
+    def save_watching_data(video_view_log_id: str, duration: int = None, client_info_dict: Dict = None, cached_data: Dict = None):
         if not cached_data:
             logger.info(f"No cached data for {video_view_log_id}")
             return

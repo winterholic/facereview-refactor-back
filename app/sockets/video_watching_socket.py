@@ -186,19 +186,28 @@ def handle_end_watching(message):
         client_info = message.get('client_info', {})
 
         if not video_view_log_id:
-            # NOTE : emit 대신 return 사용
-            # emit('error', {'status': 'error', 'message': 'Missing video_view_log_id'})
-
             return {
                 'status': 'error',
                 'message': 'Missing video_view_log_id'
             }
 
-        #NOTE: Celery task를 비동기로 실행
+        #NOTE: Celery Worker는 별도 프로세스이므로 캐시 데이터를 직접 전달
+        cached_data = watching_cache.remove_watching_data(video_view_log_id)
+        if not cached_data:
+            logger.warning(f"No cached data for {video_view_log_id}")
+            return {
+                'status': 'error',
+                'message': 'No watching data found'
+            }
+
+        #NOTE: Celery JSON serializer는 datetime 처리 불가 → 제거 (서비스에서 새로 생성)
+        cached_data.pop('created_at', None)
+
         task = save_watching_data_task.delay(
             video_view_log_id=video_view_log_id,
             duration=duration,
-            client_info=client_info
+            client_info=client_info,
+            cached_data=cached_data
         )
 
         #NOTE: 시청 종료 시 Redis 타임라인 캐시 삭제 (세션 종료)
