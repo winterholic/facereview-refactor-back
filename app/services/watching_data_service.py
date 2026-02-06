@@ -79,8 +79,17 @@ class WatchingDataService:
         watching_data_repo.insert(watching_data)
         logger.info(f"Saved watching data: {video_view_log_id}")
 
-        #NOTE: timeline_emotion_count와 video_distribution은 watch_frame에서 실시간 업데이트됨
-        #NOTE: end_watching에서는 youtube_watching_data만 저장 (중복 집계 방지)
+        #NOTE: video_distribution 평균/추천점수 업데이트 (기존 로직 유지)
+        #NOTE: watch_frame에서 emotion_counts는 실시간 증가, 여기서는 평균 계산
+        video_dist_repo = VideoDistributionRepository(mongo_db)
+        WatchingDataService._update_video_distribution(
+            video_dist_repo,
+            watching_data_repo,
+            video_id
+        )
+
+        #NOTE: video_timeline_emotion_count는 watch_frame에서 실시간 업데이트되므로 생략
+        #NOTE: (중복 집계 방지 - dedupe 로직 적용됨)
 
     @staticmethod
     def _calculate_emotion_statistics(frames: List[Dict]) -> Dict:
