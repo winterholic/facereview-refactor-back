@@ -1,6 +1,6 @@
 from flask import request, current_app
 from flask_socketio import emit
-from common.extensions import socketio, redis_client, mongo_db
+from common.extensions import socketio, redis_client, mongo_client
 from common.cache.watching_data_cache import WatchingDataCache
 from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
@@ -265,7 +265,7 @@ def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: i
             return redis_emotion_data
 
         #NOTE: Redis에 없으면 MongoDB 조회 (fallback)
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
+        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
 
         timeline_count = timeline_count_repo.find_by_video_id(video_id)
 
@@ -316,7 +316,7 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
             return
 
         #NOTE: MongoDB에서 타임라인 데이터 조회
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
+        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
         timeline_count = timeline_count_repo.find_by_video_id(video_id)
 
         if not timeline_count:
@@ -427,7 +427,7 @@ def _update_realtime_statistics(video_id: str, youtube_running_time: int, most_e
     """
     try:
         # Timeline emotion count 업데이트
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
+        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
         timeline_count_repo.increment_emotion(
             video_id=video_id,
             youtube_running_time=youtube_running_time,
@@ -435,7 +435,7 @@ def _update_realtime_statistics(video_id: str, youtube_running_time: int, most_e
         )
 
         # Video distribution 업데이트
-        video_dist_repo = VideoDistributionRepository(mongo_db)
+        video_dist_repo = VideoDistributionRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
         video_dist_repo.increment_emotion(
             video_id=video_id,
             emotion=most_emotion
