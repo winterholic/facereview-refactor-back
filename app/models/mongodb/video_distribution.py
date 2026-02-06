@@ -5,6 +5,31 @@ from common.utils.logging_utils import get_logger
 
 logger = get_logger('video_distribution')
 
+EMOTION_LABELS = ["neutral", "happy", "surprise", "sad", "angry"]
+RECOMMENDATION_WEIGHTS = {"neutral": 2, "happy": 3, "surprise": 4, "sad": 3, "angry": 3}
+
+
+@dataclass
+class EmotionCounts:
+    """실시간 집계를 위한 감정 카운트"""
+    neutral: int = 0
+    happy: int = 0
+    surprise: int = 0
+    sad: int = 0
+    angry: int = 0
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            'neutral': self.neutral,
+            'happy': self.happy,
+            'surprise': self.surprise,
+            'sad': self.sad,
+            'angry': self.angry
+        }
+
+    def total(self) -> int:
+        return self.neutral + self.happy + self.surprise + self.sad + self.angry
+
 
 @dataclass
 class EmotionAverages:
@@ -94,6 +119,38 @@ class VideoDistributionRepository:
 
     def __init__(self, db):
         self.collection = db[self.COLLECTION_NAME]
+        self.collection.create_index('video_id', unique=True)
+
+    def increment_emotion(self, video_id: str, emotion: str):
+        """
+        watch_frame 시 호출되어 감정 카운트를 증가시킴.
+        $inc 연산으로 원자적 업데이트 수행.
+        """
+        if emotion not in EMOTION_LABELS:
+            raise ValueError(f"Invalid emotion: {emotion}")
+
+        self.collection.update_one(
+            {'video_id': video_id},
+            {
+                '$inc': {
+                    'total_frames': 1,
+                    f'emotion_counts.{emotion}': 1
+                },
+                '$setOnInsert': {
+                    'video_id': video_id,
+                    'emotion_counts': {e: 0 for e in EMOTION_LABELS},
+                    'emotion_averages': {e: 0.0 for e in EMOTION_LABELS},
+                    'recommendation_scores': {e: 0.0 for e in EMOTION_LABELS},
+                    'dominant_emotion': 'neutral',
+                    'average_completion_rate': 0.0,
+                    'created_at': datetime.utcnow()
+                },
+                '$set': {
+                    'updated_at': datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
 
     def find_by_video_id(self, video_id: str) -> Optional[VideoDistribution]:
         """video_id로 조회"""

@@ -4,11 +4,14 @@ from common.extensions import socketio, redis_client, mongo_db
 from common.cache.watching_data_cache import WatchingDataCache
 from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
+from app.models.mongodb.video_distribution import VideoDistributionRepository
 from common.utils.logging_utils import get_logger
 from common.utils.kafka_producer import send_watch_frame_event
 import json
 
 logger = get_logger('socket')
+
+DEDUPE_TTL_SECONDS = 3600  # 1시간
 
 #NOTE: Lazy loading을 위한 전역 변수
 _emotion_analyzer = None
@@ -127,14 +130,25 @@ def handle_watch_frame(message):
         #NOTE: Kafka로 프레임 데이터 백업 전송 (비동기)
         cached_data = watching_cache.get_watching_data(video_view_log_id)
         if cached_data:
+            video_id = cached_data['video_id']
+
             send_watch_frame_event(
                 video_view_log_id=video_view_log_id,
                 user_id=cached_data['user_id'],
-                video_id=cached_data['video_id'],
+                video_id=video_id,
                 youtube_running_time=youtube_running_time,
                 emotion_percentages=emotion_percentages,
                 most_emotion=user_emotion['most_emotion']
             )
+
+            #NOTE: 중복 집계 방지 후 timeline/distribution 즉시 업데이트
+            should_aggregate = _check_dedupe(video_view_log_id, youtube_running_time)
+            if should_aggregate:
+                _update_realtime_statistics(
+                    video_id=video_id,
+                    youtube_running_time=youtube_running_time,
+                    most_emotion=user_emotion['most_emotion']
+                )
 
         average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
@@ -377,3 +391,57 @@ def _delete_timeline_cache(video_view_log_id: str):
 
     except Exception as e:
         logger.error(f"Redis 캐시 삭제 중 오류 발생: {e}")
+
+
+def _check_dedupe(video_view_log_id: str, youtube_running_time: int) -> bool:
+    """
+    동일 세션에서 같은 초(second)에 대해 중복 집계를 방지합니다.
+    Redis SETNX를 사용하여 이미 집계된 경우 False를 반환합니다.
+    """
+    try:
+        if not redis_client:
+            return True  # Redis가 없으면 항상 집계 허용
+
+        dedupe_key = f"facereview:dedupe:{video_view_log_id}:{youtube_running_time}"
+
+        # SETNX: 키가 없으면 설정하고 True 반환, 이미 있으면 False 반환
+        result = redis_client.setnx(dedupe_key, 1)
+
+        if result:
+            # TTL 설정 (1시간)
+            redis_client.expire(dedupe_key, DEDUPE_TTL_SECONDS)
+            return True
+
+        return False
+
+    except Exception as e:
+        logger.error(f"중복 체크 중 오류 발생: {e}")
+        return True  # 에러 시 집계 허용 (데이터 손실 방지)
+
+
+def _update_realtime_statistics(video_id: str, youtube_running_time: int, most_emotion: str):
+    """
+    watch_frame 이벤트에서 실시간으로 통계를 업데이트합니다.
+    - video_timeline_emotion_count: 해당 초의 감정 카운트 증가
+    - video_distribution: 해당 영상의 전체 감정 카운트 증가
+    """
+    try:
+        # Timeline emotion count 업데이트
+        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
+        timeline_count_repo.increment_emotion(
+            video_id=video_id,
+            youtube_running_time=youtube_running_time,
+            emotion=most_emotion
+        )
+
+        # Video distribution 업데이트
+        video_dist_repo = VideoDistributionRepository(mongo_db)
+        video_dist_repo.increment_emotion(
+            video_id=video_id,
+            emotion=most_emotion
+        )
+
+        logger.debug(f"실시간 통계 업데이트: video_id={video_id}, time={youtube_running_time}, emotion={most_emotion}")
+
+    except Exception as e:
+        logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}")

@@ -28,8 +28,6 @@ class WatchingDataService:
 
         mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
         watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
-        video_dist_repo = VideoDistributionRepository(mongo_db)
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_db)
 
         emotion_stats = WatchingDataService._calculate_emotion_statistics(frames)
         completion_rate = WatchingDataService._calculate_completion_rate(frames, video_duration)
@@ -81,17 +79,8 @@ class WatchingDataService:
         watching_data_repo.insert(watching_data)
         logger.info(f"Saved watching data: {video_view_log_id}")
 
-        WatchingDataService._update_timeline_emotion_count(
-            timeline_count_repo,
-            video_id,
-            frames
-        )
-
-        WatchingDataService._update_video_distribution(
-            video_dist_repo,
-            watching_data_repo,
-            video_id
-        )
+        #NOTE: timeline_emotion_count와 video_distribution은 watch_frame에서 실시간 업데이트됨
+        #NOTE: end_watching에서는 youtube_watching_data만 저장 (중복 집계 방지)
 
     @staticmethod
     def _calculate_emotion_statistics(frames: List[Dict]) -> Dict:
