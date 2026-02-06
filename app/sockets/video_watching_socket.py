@@ -325,14 +325,24 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
 
         #NOTE: 모든 타임라인 데이터를 딕셔너리로 변환
         timeline_data = {}
-        for time_key, counts in timeline_count.counts.items():
-            total = sum(counts)
-            if total > 0:
-                emotion_percentages = {
-                    label: round(count / total, 3)
-                    for label, count in zip(timeline_count.emotion_labels, counts)
-                }
+        for time_key, counts_data in timeline_count.counts.items():
+            # NOTE: 객체 형태 {"neutral": 5, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
+            if isinstance(counts_data, dict):
+                total = sum(counts_data.values())
+                if total > 0:
+                    emotion_percentages = {
+                        label: round(counts_data.get(label, 0) / total, 3)
+                        for label in timeline_count.emotion_labels
+                    }
+            else:
+                total = sum(counts_data)
+                if total > 0:
+                    emotion_percentages = {
+                        label: round(count / total, 3)
+                        for label, count in zip(timeline_count.emotion_labels, counts_data)
+                    }
 
+            if total > 0:
                 emotion_data = {
                     'neutral': round(emotion_percentages['neutral'] * 100, 2),
                     'happy': round(emotion_percentages['happy'] * 100, 2),

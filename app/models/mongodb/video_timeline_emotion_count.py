@@ -51,14 +51,20 @@ class VideoTimelineEmotionCount:
         if time_key not in self.counts:
             return None
 
-        counts = self.counts[time_key]
-        max_count = max(counts)
+        counts_data = self.counts[time_key]
 
-        if max_count == 0:
-            return None
-
-        max_index = counts.index(max_count)
-        return self.emotion_labels[max_index]
+        # NOTE: 객체 형태 {"neutral": 5, "happy": 3, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
+        if isinstance(counts_data, dict):
+            if not counts_data:
+                return None
+            return max(counts_data, key=counts_data.get)
+        else:
+            # 기존 배열 형태 호환
+            max_count = max(counts_data)
+            if max_count == 0:
+                return None
+            max_index = counts_data.index(max_count)
+            return self.emotion_labels[max_index]
 
     def get_emotion_percentages_at_time(self, youtube_running_time: int) -> Optional[Dict[str, float]]:
         time_key = str(youtube_running_time)
@@ -66,16 +72,26 @@ class VideoTimelineEmotionCount:
         if time_key not in self.counts:
             return None
 
-        counts = self.counts[time_key]
-        total = sum(counts)
+        counts_data = self.counts[time_key]
 
-        if total == 0:
-            return None
-
-        return {
-            label: round(count / total, 3)
-            for label, count in zip(self.emotion_labels, counts)
-        }
+        # NOTE: 객체 형태 {"neutral": 5, "happy": 3, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
+        if isinstance(counts_data, dict):
+            total = sum(counts_data.values())
+            if total == 0:
+                return None
+            return {
+                label: round(counts_data.get(label, 0) / total, 3)
+                for label in self.emotion_labels
+            }
+        else:
+            # 기존 배열 형태 호환
+            total = sum(counts_data)
+            if total == 0:
+                return None
+            return {
+                label: round(count / total, 3)
+                for label, count in zip(self.emotion_labels, counts_data)
+            }
 
 
 class VideoTimelineEmotionCountRepository:
@@ -125,13 +141,12 @@ class VideoTimelineEmotionCountRepository:
 
     def increment_emotion(self, video_id: str, youtube_running_time: int, emotion: str):
         emotion_labels = ["neutral", "happy", "surprise", "sad", "angry"]
-        try:
-            emotion_index = emotion_labels.index(emotion)
-        except ValueError:
+        if emotion not in emotion_labels:
             raise ValueError(f"Invalid emotion: {emotion}")
 
         time_key = str(youtube_running_time)
-        field_path = f"counts.{time_key}.{emotion_index}"
+        # NOTE: counts.{time_key}.{emotion_name} 형태로 저장 (객체 구조)
+        field_path = f"counts.{time_key}.{emotion}"
 
         self.collection.update_one(
             {'video_id': video_id},
@@ -145,6 +160,8 @@ class VideoTimelineEmotionCountRepository:
             },
             upsert=True
         )
+
+        logger.debug(f"Timeline emotion incremented: video_id={video_id}, time={time_key}, emotion={emotion}")
 
     def delete_by_video_id(self, video_id: str) -> Dict[str, any]:
         from flask import g

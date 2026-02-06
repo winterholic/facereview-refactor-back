@@ -3,6 +3,9 @@ from datetime import timedelta
 
 
 class Config:
+    # NOTE: 한글 등 non-ASCII 문자가 \uXXXX로 인코딩되는 것 방지
+    JSON_AS_ASCII = False
+
     SECRET_KEY = os.getenv('SECRET_KEY')
 
     DB_USERNAME = os.getenv('DB_USERNAME')
