@@ -1,6 +1,7 @@
 from flask import request, current_app
 from flask_socketio import emit
-from common.extensions import socketio, redis_client, mongo_client
+from common import extensions
+from common.extensions import socketio, redis_client
 from common.cache.watching_data_cache import WatchingDataCache
 from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
@@ -127,11 +128,13 @@ def handle_watch_frame(message):
             most_emotion=user_emotion['most_emotion']
         )
 
-        #NOTE: Kafka로 프레임 데이터 백업 전송 (비동기)
+        #NOTE: init_watching에서 저장한 캐시 데이터 조회
         cached_data = watching_cache.get_watching_data(video_view_log_id)
+
         if cached_data:
             video_id = cached_data['video_id']
 
+            #NOTE: Kafka로 프레임 데이터 백업 전송
             send_watch_frame_event(
                 video_view_log_id=video_view_log_id,
                 user_id=cached_data['user_id'],
@@ -141,14 +144,14 @@ def handle_watch_frame(message):
                 most_emotion=user_emotion['most_emotion']
             )
 
-            #NOTE: 중복 집계 방지 후 timeline/distribution 즉시 업데이트
-            should_aggregate = _check_dedupe(video_view_log_id, youtube_running_time)
-            if should_aggregate:
-                _update_realtime_statistics(
-                    video_id=video_id,
-                    youtube_running_time=youtube_running_time,
-                    most_emotion=user_emotion['most_emotion']
-                )
+            #NOTE: 실시간 통계 업데이트 (MongoDB에 저장)
+            _update_realtime_statistics(
+                video_id=video_id,
+                youtube_running_time=youtube_running_time,
+                most_emotion=user_emotion['most_emotion']
+            )
+        else:
+            logger.warning(f"cached_data 없음 - init_watching이 먼저 호출되어야 함: {video_view_log_id}")
 
         average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
@@ -265,7 +268,7 @@ def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: i
             return redis_emotion_data
 
         #NOTE: Redis에 없으면 MongoDB 조회 (fallback)
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
+        timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
 
         timeline_count = timeline_count_repo.find_by_video_id(video_id)
 
@@ -316,7 +319,7 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
             return
 
         #NOTE: MongoDB에서 타임라인 데이터 조회
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
+        timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count = timeline_count_repo.find_by_video_id(video_id)
 
         if not timeline_count:
@@ -435,23 +438,29 @@ def _update_realtime_statistics(video_id: str, youtube_running_time: int, most_e
     - video_timeline_emotion_count: 해당 초의 감정 카운트 증가
     - video_distribution: 해당 영상의 전체 감정 카운트 증가
     """
+    logger.info(f"[SAVE] _update_realtime_statistics 호출됨: video_id={video_id}, time={youtube_running_time}, emotion={most_emotion}")
+
     try:
+        if not extensions.mongo_db:
+            logger.error("[SAVE] extensions.mongo_db is None!")
+            return
+
         # Timeline emotion count 업데이트
-        timeline_count_repo = VideoTimelineEmotionCountRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
+        timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count_repo.increment_emotion(
             video_id=video_id,
             youtube_running_time=youtube_running_time,
             emotion=most_emotion
         )
+        logger.info(f"[SAVE] timeline_emotion_count 업데이트 완료: video_id={video_id}")
 
         # Video distribution 업데이트
-        video_dist_repo = VideoDistributionRepository(mongo_client[current_app.config['MONGO_DB_NAME']])
+        video_dist_repo = VideoDistributionRepository(extensions.mongo_db)
         video_dist_repo.increment_emotion(
             video_id=video_id,
             emotion=most_emotion
         )
-
-        logger.debug(f"실시간 통계 업데이트: video_id={video_id}, time={youtube_running_time}, emotion={most_emotion}")
+        logger.info(f"[SAVE] video_distribution 업데이트 완료: video_id={video_id}")
 
     except Exception as e:
-        logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}")
+        logger.error(f"[SAVE] 실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)
