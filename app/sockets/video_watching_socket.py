@@ -43,7 +43,8 @@ def handle_connect(message):
         'message': '서버에 연결완료 되었습니다.'
     }
 
-# NOTE : 소켓 연결 전 테스트용 socket 이벤트(처음에 페이지 진입하면 한번 쏴보는 용도)
+# NOTE : [DEPRECATED] watch_frame에서 자동 초기화하므로 호출 불필요
+# NOTE : 하위 호환성을 위해 유지
 @socketio.on('init_watching')
 def handle_init_watching(message):
     try:
@@ -92,25 +93,37 @@ def handle_init_watching(message):
             'message': str(e)
         }
 
-# NOTE : frame_data 보내는 socket 이벤트
+# NOTE : frame_data 보내는 socket 이벤트 (init_watching 없이 단독으로 동작)
 @socketio.on('watch_frame')
 def handle_watch_frame(message):
     try:
         video_view_log_id = message.get('video_view_log_id')
+        user_id = message.get('user_id')
+        video_id = message.get('video_id')
         youtube_running_time = message.get('youtube_running_time')
         frame_data = message.get('frame_data')
         duration = message.get('duration')
 
-        if not all([video_view_log_id, youtube_running_time, duration is not None, frame_data]):
-
-            # NOTE : emit 대신 return 사용
-            # emit('error', {'status': 'error', 'message': 'Missing required fields'})
-
+        if not all([video_view_log_id, user_id, video_id, youtube_running_time is not None, frame_data]):
             return {
                 'status': 'error',
                 'message': 'Missing required fields'
             }
 
+        #NOTE: 캐시 데이터가 없으면 초기화 (기존 init_watching 역할)
+        cached_data = watching_cache.get_watching_data(video_view_log_id)
+        if not cached_data:
+            watching_cache.init_watching_data(
+                video_view_log_id=video_view_log_id,
+                user_id=user_id,
+                video_id=video_id,
+                duration=duration
+            )
+            #NOTE: Redis에 타임라인 평균 감정 데이터 미리 캐싱 (최초 1회)
+            _cache_timeline_emotion_data(video_view_log_id, video_id)
+            logger.info(f"watch_frame에서 캐시 초기화 완료: {video_view_log_id}")
+
+        #NOTE: 감정 분석
         user_emotion = get_emotion_analyzer().analyze_emotion(frame_data)
 
         emotion_percentages = {
@@ -121,6 +134,7 @@ def handle_watch_frame(message):
             'angry': user_emotion['angry']
         }
 
+        #NOTE: 캐시에 프레임 데이터 추가
         watching_cache.add_frame_data(
             video_view_log_id=video_view_log_id,
             youtube_running_time=youtube_running_time,
@@ -128,31 +142,24 @@ def handle_watch_frame(message):
             most_emotion=user_emotion['most_emotion']
         )
 
-        #NOTE: init_watching에서 저장한 캐시 데이터 조회
-        cached_data = watching_cache.get_watching_data(video_view_log_id)
+        #NOTE: Kafka로 프레임 데이터 백업 전송
+        send_watch_frame_event(
+            video_view_log_id=video_view_log_id,
+            user_id=user_id,
+            video_id=video_id,
+            youtube_running_time=youtube_running_time,
+            emotion_percentages=emotion_percentages,
+            most_emotion=user_emotion['most_emotion']
+        )
 
-        if cached_data:
-            video_id = cached_data['video_id']
+        #NOTE: 실시간 통계 업데이트 (MongoDB에 저장)
+        _update_realtime_statistics(
+            video_id=video_id,
+            youtube_running_time=youtube_running_time,
+            most_emotion=user_emotion['most_emotion']
+        )
 
-            #NOTE: Kafka로 프레임 데이터 백업 전송
-            send_watch_frame_event(
-                video_view_log_id=video_view_log_id,
-                user_id=cached_data['user_id'],
-                video_id=video_id,
-                youtube_running_time=youtube_running_time,
-                emotion_percentages=emotion_percentages,
-                most_emotion=user_emotion['most_emotion']
-            )
-
-            #NOTE: 실시간 통계 업데이트 (MongoDB에 저장)
-            _update_realtime_statistics(
-                video_id=video_id,
-                youtube_running_time=youtube_running_time,
-                most_emotion=user_emotion['most_emotion']
-            )
-        else:
-            logger.warning(f"cached_data 없음 - init_watching이 먼저 호출되어야 함: {video_view_log_id}")
-
+        #NOTE: 평균 감정 데이터 조회
         average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
         response = {
@@ -161,9 +168,6 @@ def handle_watch_frame(message):
             'average_emotion': average_emotion
         }
 
-        # NOTE : emit 대신 return 사용
-        # emit('frame_analyzed', response)
-
         return {
             'status': 'success',
             'message': 'Frame analyzed',
@@ -171,11 +175,7 @@ def handle_watch_frame(message):
         }
 
     except Exception as e:
-        logger.error(f"프레임 분석 중 오류 발생: {e}")
-
-        # NOTE : emit 대신 return 사용
-        # emit('error', {'status': 'error', 'message': str(e)})
-
+        logger.error(f"프레임 분석 중 오류 발생: {e}", exc_info=True)
         return {
             'status': 'error',
             'message': str(e)
@@ -194,7 +194,8 @@ def handle_disconnect(message):
     }
 
 
-# NOTE : emit 대신 return 사용
+# NOTE : [OPTIONAL] youtube_watching_data 저장용 (개인 시청 기록)
+# NOTE : 호출하지 않아도 실시간 통계는 watch_frame에서 저장됨
 @socketio.on('end_watching')
 def handle_end_watching(message):
     try:
