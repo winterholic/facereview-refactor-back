@@ -454,7 +454,7 @@ def _update_realtime_statistics(
     - video_distribution: 해당 영상의 전체 감정 카운트 증가
     """
     try:
-        if not extensions.mongo_db:
+        if extensions.mongo_db is None:
             logger.error("[SAVE] extensions.mongo_db is None!")
             return
 
