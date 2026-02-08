@@ -6,7 +6,29 @@ from common.utils.logging_utils import get_logger
 logger = get_logger('video_distribution')
 
 EMOTION_LABELS = ["neutral", "happy", "surprise", "sad", "angry"]
-RECOMMENDATION_WEIGHTS = {"neutral": 2, "happy": 3, "surprise": 4, "sad": 3, "angry": 3}
+
+# NOTE: 카테고리별 감정 가중치 (main_rec_alg.py에서 가져옴)
+CATEGORY_WEIGHTS = {
+    'drama': {'neutral': 0.5, 'happy': 2.5, 'surprise': 2.0, 'sad': 3.0, 'angry': 2.0},
+    'eating': {'neutral': 1.0, 'happy': 4.0, 'surprise': 2.5, 'sad': 0.2, 'angry': 0.5},
+    'travel': {'neutral': 0.8, 'happy': 3.5, 'surprise': 3.0, 'sad': 0.5, 'angry': 0.3},
+    'cook': {'neutral': 2.5, 'happy': 3.0, 'surprise': 1.5, 'sad': 0.3, 'angry': 0.5},
+    'show': {'neutral': 0.3, 'happy': 4.5, 'surprise': 2.5, 'sad': 1.0, 'angry': 0.8},
+    'information': {'neutral': 3.0, 'happy': 1.5, 'surprise': 2.5, 'sad': 0.5, 'angry': 1.5},
+    'horror': {'neutral': 0.5, 'happy': 0.3, 'surprise': 5.0, 'sad': 1.5, 'angry': 2.0},
+    'exercise': {'neutral': 2.0, 'happy': 3.5, 'surprise': 1.5, 'sad': 0.5, 'angry': 1.5},
+    'vlog': {'neutral': 2.5, 'happy': 2.5, 'surprise': 1.5, 'sad': 1.5, 'angry': 1.0},
+    'game': {'neutral': 1.5, 'happy': 3.0, 'surprise': 2.5, 'sad': 1.5, 'angry': 2.5},
+    'sports': {'neutral': 1.0, 'happy': 3.5, 'surprise': 4.0, 'sad': 1.0, 'angry': 1.5},
+    'music': {'neutral': 1.5, 'happy': 4.0, 'surprise': 2.0, 'sad': 2.5, 'angry': 1.0},
+    'animal': {'neutral': 1.0, 'happy': 4.5, 'surprise': 3.0, 'sad': 0.8, 'angry': 0.2},
+    'beauty': {'neutral': 2.0, 'happy': 3.5, 'surprise': 2.5, 'sad': 0.5, 'angry': 0.5},
+    'comedy': {'neutral': 0.2, 'happy': 5.0, 'surprise': 2.0, 'sad': 0.3, 'angry': 0.5},
+    'etc': {'neutral': 2.5, 'happy': 2.0, 'surprise': 2.0, 'sad': 1.5, 'angry': 1.5}
+}
+
+# NOTE: 카테고리가 없을 때 기본 가중치
+DEFAULT_WEIGHTS = {'neutral': 2.0, 'happy': 2.0, 'surprise': 2.0, 'sad': 2.0, 'angry': 2.0}
 
 
 @dataclass
@@ -121,16 +143,15 @@ class VideoDistributionRepository:
         self.collection = db[self.COLLECTION_NAME]
         self.collection.create_index('video_id', unique=True)
 
-    def increment_emotion(self, video_id: str, emotion: str):
+    def increment_emotion(self, video_id: str, emotion: str, category: str = None):
         """
-        watch_frame 시 호출되어 감정 카운트를 증가시킴.
-        $inc 연산으로 원자적 업데이트 수행.
+        watch_frame 시 호출되어 감정 카운트를 증가시키고
+        emotion_averages, recommendation_scores를 재계산함.
         """
         if emotion not in EMOTION_LABELS:
             raise ValueError(f"Invalid emotion: {emotion}")
 
-        # NOTE: emotion_counts는 $setOnInsert에서 제외 - $inc와 충돌 방지
-        # NOTE: $inc가 자동으로 필드를 생성하고 증가시킴
+        # NOTE: 1단계 - emotion_counts와 total_frames 증가
         self.collection.update_one(
             {'video_id': video_id},
             {
@@ -140,6 +161,7 @@ class VideoDistributionRepository:
                 },
                 '$setOnInsert': {
                     'video_id': video_id,
+                    'category': category,
                     'emotion_averages': {e: 0.0 for e in EMOTION_LABELS},
                     'recommendation_scores': {e: 0.0 for e in EMOTION_LABELS},
                     'dominant_emotion': 'neutral',
@@ -153,7 +175,57 @@ class VideoDistributionRepository:
             upsert=True
         )
 
-        logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}")
+        # NOTE: 2단계 - emotion_averages, recommendation_scores 재계산
+        self._recalculate_scores(video_id, category)
+
+        logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}, category={category}")
+
+    def _recalculate_scores(self, video_id: str, category: str = None):
+        """
+        emotion_counts와 total_frames를 기반으로
+        emotion_averages와 recommendation_scores를 재계산함.
+        """
+        doc = self.collection.find_one({'video_id': video_id})
+        if not doc:
+            return
+
+        total_frames = doc.get('total_frames', 0)
+        emotion_counts = doc.get('emotion_counts', {})
+
+        if total_frames == 0:
+            return
+
+        # NOTE: 카테고리가 파라미터로 안 왔으면 문서에서 가져옴
+        if not category:
+            category = doc.get('category', 'etc')
+
+        # NOTE: emotion_averages 계산 (각 감정 비율)
+        emotion_averages = {}
+        for e in EMOTION_LABELS:
+            count = emotion_counts.get(e, 0)
+            emotion_averages[e] = round(count / total_frames, 4)
+
+        # NOTE: recommendation_scores 계산 (카테고리 가중치 적용)
+        weights = CATEGORY_WEIGHTS.get(category, DEFAULT_WEIGHTS)
+        recommendation_scores = {}
+        for e in EMOTION_LABELS:
+            recommendation_scores[e] = round(emotion_averages[e] * weights[e], 4)
+
+        # NOTE: dominant_emotion 결정 (recommendation_scores 기준)
+        dominant_emotion = max(recommendation_scores, key=recommendation_scores.get)
+
+        # NOTE: 계산된 값들 업데이트
+        self.collection.update_one(
+            {'video_id': video_id},
+            {
+                '$set': {
+                    'emotion_averages': emotion_averages,
+                    'recommendation_scores': recommendation_scores,
+                    'dominant_emotion': dominant_emotion,
+                    'category': category
+                }
+            }
+        )
 
     def find_by_video_id(self, video_id: str) -> Optional[VideoDistribution]:
         """video_id로 조회"""

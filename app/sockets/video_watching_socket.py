@@ -8,12 +8,15 @@ from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotion
 from app.models.mongodb.video_distribution import VideoDistributionRepository
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
 from app.models.video_view_log import VideoViewLog
+from app.models.video import Video
 from common.extensions import db
 from common.utils.logging_utils import get_logger
 from common.utils.kafka_producer import send_watch_frame_event
 import json
 
 logger = get_logger('socket')
+
+VIDEO_CATEGORY_TTL = 86400  # 24시간
 
 DEDUPE_TTL_SECONDS = 3600  # 1시간
 
@@ -159,7 +162,10 @@ def handle_watch_frame(message):
             most_emotion=user_emotion['most_emotion']
         )
 
-        #NOTE: 실시간 통계 업데이트 (MongoDB 3개 컬렉션 저장)
+        #NOTE: 평균 감정 데이터 조회 (현재 프레임 저장 전에 조회해야 내 데이터가 포함 안 됨)
+        average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
+
+        #NOTE: 실시간 통계 업데이트 (MongoDB 3개 컬렉션 저장) - 평균 조회 후에 저장
         _update_realtime_statistics(
             video_view_log_id=video_view_log_id,
             user_id=user_id,
@@ -169,9 +175,6 @@ def handle_watch_frame(message):
             most_emotion=user_emotion['most_emotion'],
             duration=duration
         )
-
-        #NOTE: 평균 감정 데이터 조회
-        average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
         response = {
             'youtube_running_time': youtube_running_time,
@@ -276,12 +279,18 @@ def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: f
 
         #NOTE: 먼저 Redis에서 조회 (빠름)
         redis_emotion_data = _get_timeline_emotion_from_redis(video_view_log_id, youtube_running_time)
-        if redis_emotion_data:
+
+        if redis_emotion_data == "EMPTY":
+            #NOTE: Redis 캐시는 있지만 해당 시간 데이터가 없음 → 기본값 반환 (MongoDB fallback 안 함)
+            return _get_default_emotion()
+        elif redis_emotion_data is not None:
+            #NOTE: Redis에서 데이터 찾음
             return redis_emotion_data
 
-        #NOTE: Redis에 없으면 MongoDB 조회 (fallback)
-        timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
+        #NOTE: Redis 캐시 자체가 없을 때만 MongoDB fallback (세션 중간에 캐시가 만료된 경우 등)
+        logger.debug(f"Redis 캐시 없음, MongoDB fallback: {video_view_log_id}")
 
+        timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count = timeline_count_repo.find_by_video_id(video_id)
 
         if not timeline_count:
@@ -334,49 +343,48 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
         timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count = timeline_count_repo.find_by_video_id(video_id)
 
-        if not timeline_count:
-            logger.debug(f"타임라인 데이터 없음: {video_id}")
-            return
-
-        #NOTE: 모든 타임라인 데이터를 딕셔너리로 변환
         timeline_data = {}
-        for time_key, counts_data in timeline_count.counts.items():
-            # NOTE: 객체 형태 {"neutral": 5, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
-            if isinstance(counts_data, dict):
-                total = sum(counts_data.values())
+
+        if timeline_count and timeline_count.counts:
+            #NOTE: 모든 타임라인 데이터를 딕셔너리로 변환
+            for time_key, counts_data in timeline_count.counts.items():
+                # NOTE: 객체 형태 {"neutral": 5, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
+                if isinstance(counts_data, dict):
+                    total = sum(counts_data.values())
+                    if total > 0:
+                        emotion_percentages = {
+                            label: round(counts_data.get(label, 0) / total, 3)
+                            for label in timeline_count.emotion_labels
+                        }
+                else:
+                    total = sum(counts_data)
+                    if total > 0:
+                        emotion_percentages = {
+                            label: round(count / total, 3)
+                            for label, count in zip(timeline_count.emotion_labels, counts_data)
+                        }
+
                 if total > 0:
-                    emotion_percentages = {
-                        label: round(counts_data.get(label, 0) / total, 3)
-                        for label in timeline_count.emotion_labels
-                    }
-            else:
-                total = sum(counts_data)
-                if total > 0:
-                    emotion_percentages = {
-                        label: round(count / total, 3)
-                        for label, count in zip(timeline_count.emotion_labels, counts_data)
+                    emotion_data = {
+                        'neutral': round(emotion_percentages['neutral'] * 100, 2),
+                        'happy': round(emotion_percentages['happy'] * 100, 2),
+                        'surprise': round(emotion_percentages['surprise'] * 100, 2),
+                        'sad': round(emotion_percentages['sad'] * 100, 2),
+                        'angry': round(emotion_percentages['angry'] * 100, 2)
                     }
 
-            if total > 0:
-                emotion_data = {
-                    'neutral': round(emotion_percentages['neutral'] * 100, 2),
-                    'happy': round(emotion_percentages['happy'] * 100, 2),
-                    'surprise': round(emotion_percentages['surprise'] * 100, 2),
-                    'sad': round(emotion_percentages['sad'] * 100, 2),
-                    'angry': round(emotion_percentages['angry'] * 100, 2)
-                }
+                    most_emotion = max(emotion_data, key=emotion_data.get)
+                    emotion_data['most_emotion'] = most_emotion
 
-                most_emotion = max(emotion_data, key=emotion_data.get)
-                emotion_data['most_emotion'] = most_emotion
+                    timeline_data[time_key] = emotion_data
 
-                timeline_data[time_key] = emotion_data
-
-        #NOTE: Redis에 저장 (TTL: 3시간 = 10800초)
-        if redis_client and timeline_data:
+        #NOTE: Redis에 저장 (데이터가 없어도 빈 객체 {} 캐싱 - MongoDB fallback 방지)
+        #NOTE: TTL: 3시간 = 10800초
+        if redis_client:
             redis_client.setex(
                 redis_key,
                 10800,  # 3시간
-                json.dumps(timeline_data)
+                json.dumps(timeline_data)  # 빈 객체 {}도 캐싱됨
             )
             logger.info(f"타임라인 데이터 Redis 캐싱 완료: {video_view_log_id} ({len(timeline_data)}개 타임스탬프)")
 
@@ -384,7 +392,14 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
         logger.error(f"타임라인 데이터 캐싱 중 오류 발생: {e}")
 
 
-def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_time: float) -> dict:
+def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_time: float):
+    """
+    Redis에서 타임라인 감정 데이터 조회.
+    Returns:
+        - dict: 해당 시간의 감정 데이터
+        - "EMPTY": Redis에 캐시는 있지만 해당 시간 데이터가 없음 (MongoDB fallback 하지 말 것)
+        - None: Redis에 캐시 자체가 없음 (MongoDB fallback 필요)
+    """
     try:
         redis_key = f"facereview:session:{video_view_log_id}:timeline"
 
@@ -393,14 +408,19 @@ def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_tim
 
         #NOTE: Redis에서 타임라인 데이터 조회
         cached_data = redis_client.get(redis_key)
-        if not cached_data:
-            return None
+        if cached_data is None:
+            return None  # 캐시 자체가 없음 → MongoDB fallback
 
         timeline_data = json.loads(cached_data)
         # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
-        time_key = str(int(youtube_running_time * 100))
+        time_key = str(int(float(youtube_running_time) * 100))
 
-        return timeline_data.get(time_key)
+        result = timeline_data.get(time_key)
+        if result:
+            return result
+        else:
+            # NOTE: 캐시는 있지만 해당 시간 데이터가 없음 → MongoDB fallback 하지 않음
+            return "EMPTY"
 
     except Exception as e:
         logger.error(f"Redis 타임라인 조회 중 오류 발생: {e}")
@@ -417,6 +437,41 @@ def _delete_timeline_cache(video_view_log_id: str):
 
     except Exception as e:
         logger.error(f"Redis 캐시 삭제 중 오류 발생: {e}")
+
+
+def _get_video_category(video_id: str) -> str:
+    """
+    비디오 카테고리를 Redis 캐시에서 조회하거나, 없으면 RDB에서 조회 후 캐싱.
+    recommendation_scores 계산에 사용됨.
+    """
+    try:
+        redis_key = f"facereview:video:{video_id}:category"
+
+        # NOTE: Redis에서 먼저 조회
+        if redis_client:
+            cached_category = redis_client.get(redis_key)
+            if cached_category:
+                return cached_category.decode('utf-8') if isinstance(cached_category, bytes) else cached_category
+
+        # NOTE: RDB에서 조회
+        video = Video.query.filter_by(video_id=video_id).first()
+        if not video:
+            logger.warning(f"Video not found: {video_id}")
+            return 'etc'
+
+        # NOTE: GenreEnum을 문자열로 변환
+        category = video.category.value if video.category else 'etc'
+
+        # NOTE: Redis에 캐싱 (24시간 TTL)
+        if redis_client:
+            redis_client.setex(redis_key, VIDEO_CATEGORY_TTL, category)
+            logger.debug(f"Video category cached: {video_id} -> {category}")
+
+        return category
+
+    except Exception as e:
+        logger.error(f"비디오 카테고리 조회 중 오류 발생: {e}")
+        return 'etc'
 
 
 def _check_dedupe(video_view_log_id: str, youtube_running_time: int) -> bool:
@@ -491,14 +546,16 @@ def _update_realtime_statistics(
             emotion=most_emotion
         )
 
-        # 3. video_distribution 업데이트
+        # 3. video_distribution 업데이트 (카테고리 기반 recommendation_scores 계산 포함)
+        category = _get_video_category(video_id)
         video_dist_repo = VideoDistributionRepository(extensions.mongo_db)
         video_dist_repo.increment_emotion(
             video_id=video_id,
-            emotion=most_emotion
+            emotion=most_emotion,
+            category=category
         )
 
-        logger.info(f"[REALTIME_SAVE] 완료: {video_view_log_id}, time_key={time_key_preview}, emotion={most_emotion}")
+        logger.info(f"[REALTIME_SAVE] 완료: {video_view_log_id}, time_key={time_key_preview}, emotion={most_emotion}, category={category}")
 
     except Exception as e:
         logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)
