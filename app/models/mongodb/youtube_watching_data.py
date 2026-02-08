@@ -170,6 +170,70 @@ class YoutubeWatchingDataRepository:
     def count_by_video_id(self, video_id: str) -> int:
         return self.collection.count_documents({'video_id': video_id})
 
+    def upsert_frame(
+        self,
+        video_view_log_id: str,
+        user_id: str,
+        video_id: str,
+        youtube_running_time: int,
+        emotion_percentages: Dict[str, float],
+        most_emotion: str,
+        duration: int = None
+    ):
+        """
+        watch_frame에서 호출하여 프레임 데이터를 실시간으로 저장합니다.
+        문서가 없으면 생성하고, 있으면 타임라인 데이터를 추가합니다.
+        """
+        time_key = str(youtube_running_time)
+
+        emotion_scores = [
+            emotion_percentages.get('neutral', 0.0),
+            emotion_percentages.get('happy', 0.0),
+            emotion_percentages.get('surprise', 0.0),
+            emotion_percentages.get('sad', 0.0),
+            emotion_percentages.get('angry', 0.0)
+        ]
+
+        self.collection.update_one(
+            {'video_view_log_id': video_view_log_id},
+            {
+                '$set': {
+                    f'most_emotion_timeline.{time_key}': most_emotion,
+                    f'emotion_score_timeline.{time_key}': emotion_scores,
+                    'updated_at': datetime.utcnow()
+                },
+                '$setOnInsert': {
+                    'video_view_log_id': video_view_log_id,
+                    'user_id': user_id,
+                    'video_id': video_id,
+                    'duration': duration,
+                    'created_at': datetime.utcnow(),
+                    'completion_rate': 0.0,
+                    'dominant_emotion': 'neutral',
+                    'emotion_percentages': {
+                        'neutral': 0.0,
+                        'happy': 0.0,
+                        'surprise': 0.0,
+                        'sad': 0.0,
+                        'angry': 0.0
+                    },
+                    'client_info': {
+                        'ip_address': None,
+                        'user_agent': None,
+                        'device': {
+                            'os': None,
+                            'browser': None,
+                            'is_mobile': False
+                        }
+                    }
+                },
+                '$inc': {
+                    'frame_count': 1
+                }
+            },
+            upsert=True
+        )
+
     def compensate_insert(self, compensation_data: Dict[str, any]):
         video_view_log_id = compensation_data['video_view_log_id']
 

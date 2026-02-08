@@ -6,6 +6,7 @@ from common.cache.watching_data_cache import WatchingDataCache
 from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 from app.models.mongodb.video_distribution import VideoDistributionRepository
+from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
 from common.utils.logging_utils import get_logger
 from common.utils.kafka_producer import send_watch_frame_event
 import json
@@ -152,11 +153,15 @@ def handle_watch_frame(message):
             most_emotion=user_emotion['most_emotion']
         )
 
-        #NOTE: 실시간 통계 업데이트 (MongoDB에 저장)
+        #NOTE: 실시간 통계 업데이트 (MongoDB 3개 컬렉션 저장)
         _update_realtime_statistics(
+            video_view_log_id=video_view_log_id,
+            user_id=user_id,
             video_id=video_id,
             youtube_running_time=youtube_running_time,
-            most_emotion=user_emotion['most_emotion']
+            emotion_percentages=emotion_percentages,
+            most_emotion=user_emotion['most_emotion'],
+            duration=duration
         )
 
         #NOTE: 평균 감정 데이터 조회
@@ -433,35 +438,54 @@ def _check_dedupe(video_view_log_id: str, youtube_running_time: int) -> bool:
         return True  # 에러 시 집계 허용 (데이터 손실 방지)
 
 
-def _update_realtime_statistics(video_id: str, youtube_running_time: int, most_emotion: str):
+def _update_realtime_statistics(
+    video_view_log_id: str,
+    user_id: str,
+    video_id: str,
+    youtube_running_time: int,
+    emotion_percentages: dict,
+    most_emotion: str,
+    duration: int = None
+):
     """
-    watch_frame 이벤트에서 실시간으로 통계를 업데이트합니다.
+    watch_frame 이벤트에서 실시간으로 3개 컬렉션을 업데이트합니다.
+    - youtube_watching_data: 개인 시청 기록 (프레임별 타임라인)
     - video_timeline_emotion_count: 해당 초의 감정 카운트 증가
     - video_distribution: 해당 영상의 전체 감정 카운트 증가
     """
-    logger.info(f"[SAVE] _update_realtime_statistics 호출됨: video_id={video_id}, time={youtube_running_time}, emotion={most_emotion}")
-
     try:
         if not extensions.mongo_db:
             logger.error("[SAVE] extensions.mongo_db is None!")
             return
 
-        # Timeline emotion count 업데이트
+        # 1. youtube_watching_data 업데이트 (개인 시청 기록)
+        watching_data_repo = YoutubeWatchingDataRepository(extensions.mongo_db)
+        watching_data_repo.upsert_frame(
+            video_view_log_id=video_view_log_id,
+            user_id=user_id,
+            video_id=video_id,
+            youtube_running_time=youtube_running_time,
+            emotion_percentages=emotion_percentages,
+            most_emotion=most_emotion,
+            duration=duration
+        )
+
+        # 2. video_timeline_emotion_count 업데이트
         timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count_repo.increment_emotion(
             video_id=video_id,
             youtube_running_time=youtube_running_time,
             emotion=most_emotion
         )
-        logger.info(f"[SAVE] timeline_emotion_count 업데이트 완료: video_id={video_id}")
 
-        # Video distribution 업데이트
+        # 3. video_distribution 업데이트
         video_dist_repo = VideoDistributionRepository(extensions.mongo_db)
         video_dist_repo.increment_emotion(
             video_id=video_id,
             emotion=most_emotion
         )
-        logger.info(f"[SAVE] video_distribution 업데이트 완료: video_id={video_id}")
+
+        logger.debug(f"실시간 저장 완료: {video_view_log_id}, time={youtube_running_time}")
 
     except Exception as e:
-        logger.error(f"[SAVE] 실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)
+        logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)
