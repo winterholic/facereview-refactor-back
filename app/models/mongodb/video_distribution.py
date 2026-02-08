@@ -129,6 +129,8 @@ class VideoDistributionRepository:
         if emotion not in EMOTION_LABELS:
             raise ValueError(f"Invalid emotion: {emotion}")
 
+        # NOTE: emotion_counts는 $setOnInsert에서 제외 - $inc와 충돌 방지
+        # NOTE: $inc가 자동으로 필드를 생성하고 증가시킴
         self.collection.update_one(
             {'video_id': video_id},
             {
@@ -138,7 +140,6 @@ class VideoDistributionRepository:
                 },
                 '$setOnInsert': {
                     'video_id': video_id,
-                    'emotion_counts': {e: 0 for e in EMOTION_LABELS},
                     'emotion_averages': {e: 0.0 for e in EMOTION_LABELS},
                     'recommendation_scores': {e: 0.0 for e in EMOTION_LABELS},
                     'dominant_emotion': 'neutral',
@@ -151,6 +152,8 @@ class VideoDistributionRepository:
             },
             upsert=True
         )
+
+        logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}")
 
     def find_by_video_id(self, video_id: str) -> Optional[VideoDistribution]:
         """video_id로 조회"""

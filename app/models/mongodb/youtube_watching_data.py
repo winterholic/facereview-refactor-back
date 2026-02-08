@@ -175,7 +175,7 @@ class YoutubeWatchingDataRepository:
         video_view_log_id: str,
         user_id: str,
         video_id: str,
-        youtube_running_time: int,
+        youtube_running_time: float,
         emotion_percentages: Dict[str, float],
         most_emotion: str,
         duration: int = None
@@ -184,7 +184,13 @@ class YoutubeWatchingDataRepository:
         watch_frame에서 호출하여 프레임 데이터를 실시간으로 저장합니다.
         문서가 없으면 생성하고, 있으면 타임라인 데이터를 추가합니다.
         """
-        time_key = str(youtube_running_time)
+        # NOTE: youtube_running_time이 문자열로 올 수 있으므로 float으로 변환
+        running_time_float = float(youtube_running_time)
+
+        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        time_key = str(int(running_time_float * 100))
+
+        logger.debug(f"upsert_frame: video_view_log_id={video_view_log_id}, original_time={youtube_running_time}, time_key={time_key}")
 
         emotion_scores = [
             emotion_percentages.get('neutral', 0.0),

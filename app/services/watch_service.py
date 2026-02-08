@@ -85,7 +85,9 @@ class WatchService:
         }
 
         for running_time in youtube_running_times:
-            percentages = timeline_count.get_emotion_percentages_at_time(running_time)
+            # NOTE: running_time은 밀리초(ms), get_emotion_percentages_at_time은 초(s) 단위를 받음
+            running_time_seconds = running_time / 1000.0
+            percentages = timeline_count.get_emotion_percentages_at_time(running_time_seconds)
 
             if percentages:
                 for emotion in ['happy', 'neutral', 'surprise', 'sad', 'angry']:

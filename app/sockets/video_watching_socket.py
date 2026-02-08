@@ -7,6 +7,8 @@ from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 from app.models.mongodb.video_distribution import VideoDistributionRepository
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
+from app.models.video_view_log import VideoViewLog
+from common.extensions import db
 from common.utils.logging_utils import get_logger
 from common.utils.kafka_producer import send_watch_frame_event
 import json
@@ -122,6 +124,10 @@ def handle_watch_frame(message):
             )
             #NOTE: Redis에 타임라인 평균 감정 데이터 미리 캐싱 (최초 1회)
             _cache_timeline_emotion_data(video_view_log_id, video_id)
+
+            #NOTE: RDB video_view_log 테이블에 시청 기록 저장 (최초 1회)
+            _create_video_view_log(video_view_log_id, user_id, video_id)
+
             logger.info(f"watch_frame에서 캐시 초기화 완료: {video_view_log_id}")
 
         #NOTE: 감정 분석
@@ -260,7 +266,7 @@ def handle_end_watching(message):
         }
 
 
-def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: int) -> dict:
+def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: float) -> dict:
     try:
         cached_data = watching_cache.get_watching_data(video_view_log_id)
         if not cached_data:
@@ -378,7 +384,7 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
         logger.error(f"타임라인 데이터 캐싱 중 오류 발생: {e}")
 
 
-def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_time: int) -> dict:
+def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_time: float) -> dict:
     try:
         redis_key = f"facereview:session:{video_view_log_id}:timeline"
 
@@ -391,7 +397,8 @@ def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_tim
             return None
 
         timeline_data = json.loads(cached_data)
-        time_key = str(youtube_running_time)
+        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        time_key = str(int(youtube_running_time * 100))
 
         return timeline_data.get(time_key)
 
@@ -442,7 +449,7 @@ def _update_realtime_statistics(
     video_view_log_id: str,
     user_id: str,
     video_id: str,
-    youtube_running_time: int,
+    youtube_running_time: float,
     emotion_percentages: dict,
     most_emotion: str,
     duration: int = None
@@ -458,13 +465,19 @@ def _update_realtime_statistics(
             logger.error("[SAVE] extensions.mongo_db is None!")
             return
 
+        # NOTE: youtube_running_time 타입 확인 및 변환
+        running_time = float(youtube_running_time) if youtube_running_time is not None else 0.0
+        time_key_preview = str(int(running_time * 100))
+
+        logger.info(f"[REALTIME_SAVE] video_id={video_id}, original_time={youtube_running_time} (type={type(youtube_running_time).__name__}), time_key={time_key_preview}, emotion={most_emotion}")
+
         # 1. youtube_watching_data 업데이트 (개인 시청 기록)
         watching_data_repo = YoutubeWatchingDataRepository(extensions.mongo_db)
         watching_data_repo.upsert_frame(
             video_view_log_id=video_view_log_id,
             user_id=user_id,
             video_id=video_id,
-            youtube_running_time=youtube_running_time,
+            youtube_running_time=running_time,
             emotion_percentages=emotion_percentages,
             most_emotion=most_emotion,
             duration=duration
@@ -474,7 +487,7 @@ def _update_realtime_statistics(
         timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count_repo.increment_emotion(
             video_id=video_id,
-            youtube_running_time=youtube_running_time,
+            youtube_running_time=running_time,
             emotion=most_emotion
         )
 
@@ -485,7 +498,33 @@ def _update_realtime_statistics(
             emotion=most_emotion
         )
 
-        logger.debug(f"실시간 저장 완료: {video_view_log_id}, time={youtube_running_time}")
+        logger.info(f"[REALTIME_SAVE] 완료: {video_view_log_id}, time_key={time_key_preview}, emotion={most_emotion}")
 
     except Exception as e:
         logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)
+
+
+def _create_video_view_log(video_view_log_id: str, user_id: str, video_id: str):
+    """
+    RDB video_view_log 테이블에 시청 기록을 저장합니다.
+    watch_frame 최초 호출 시 1회만 실행됩니다.
+    """
+    try:
+        # 이미 존재하는지 확인
+        existing = VideoViewLog.query.filter_by(video_view_log_id=video_view_log_id).first()
+        if existing:
+            logger.debug(f"video_view_log 이미 존재: {video_view_log_id}")
+            return
+
+        video_view_log = VideoViewLog(
+            video_view_log_id=video_view_log_id,
+            user_id=user_id,
+            video_id=video_id
+        )
+        db.session.add(video_view_log)
+        db.session.commit()
+        logger.info(f"video_view_log 저장 완료: {video_view_log_id}")
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"video_view_log 저장 중 오류 발생: {e}", exc_info=True)

@@ -45,8 +45,9 @@ class VideoTimelineEmotionCount:
         except ValueError:
             raise ValueError(f"Invalid emotion: {emotion}")
 
-    def get_dominant_emotion_at_time(self, youtube_running_time: int) -> Optional[str]:
-        time_key = str(youtube_running_time)
+    def get_dominant_emotion_at_time(self, youtube_running_time: float) -> Optional[str]:
+        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        time_key = str(int(youtube_running_time * 100))
 
         if time_key not in self.counts:
             return None
@@ -66,8 +67,9 @@ class VideoTimelineEmotionCount:
             max_index = counts_data.index(max_count)
             return self.emotion_labels[max_index]
 
-    def get_emotion_percentages_at_time(self, youtube_running_time: int) -> Optional[Dict[str, float]]:
-        time_key = str(youtube_running_time)
+    def get_emotion_percentages_at_time(self, youtube_running_time: float) -> Optional[Dict[str, float]]:
+        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        time_key = str(int(youtube_running_time * 100))
 
         if time_key not in self.counts:
             return None
@@ -139,13 +141,21 @@ class VideoTimelineEmotionCountRepository:
 
         return compensation_data
 
-    def increment_emotion(self, video_id: str, youtube_running_time: int, emotion: str):
+    def increment_emotion(self, video_id: str, youtube_running_time: float, emotion: str):
         emotion_labels = ["neutral", "happy", "surprise", "sad", "angry"]
         if emotion not in emotion_labels:
             raise ValueError(f"Invalid emotion: {emotion}")
 
-        time_key = str(youtube_running_time)
+        # NOTE: youtube_running_time이 문자열로 올 수 있으므로 float으로 변환
+        running_time_float = float(youtube_running_time)
+
+        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        time_key = str(int(running_time_float * 100))
+
+        logger.debug(f"Timeline increment: video_id={video_id}, original_time={youtube_running_time}, time_key={time_key}, emotion={emotion}")
+
         # NOTE: counts.{time_key}.{emotion_name} 형태로 저장 (객체 구조)
+        # NOTE: field_path에 점(.)이 포함되면 MongoDB가 중첩으로 해석하므로 주의
         field_path = f"counts.{time_key}.{emotion}"
 
         self.collection.update_one(
