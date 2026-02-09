@@ -148,3 +148,16 @@ def get_highlight():
     user_id = g.user_id
 
     return MypageService.get_highlight(user_id)
+
+
+@mypage_blueprint.route('/withdraw', methods=['DELETE'])
+@login_required
+@mypage_blueprint.response(200, SuccessResponseSchema)
+@mypage_blueprint.doc(security=[{"BearerAuth": []}])
+def withdraw_user():
+    MypageService.withdraw_user(g.user_id)
+
+    return {
+        "result": "success",
+        "message": "회원 탈퇴가 완료되었습니다."
+    }

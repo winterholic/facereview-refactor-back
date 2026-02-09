@@ -20,7 +20,12 @@ from common.utils.email_utils import (
 
 from app.models.user import User
 from app.models.user_favorite_genre import UserFavoriteGenre
+from app.models.user_point_history import UserPointHistory
 from app.models.video import Video
+from app.models.video_like import VideoLike
+from app.models.video_view_log import VideoViewLog
+from app.models.video_request import VideoRequest
+from app.models.comment import Comment
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
 
 from app.dto.mypage import (
@@ -40,6 +45,29 @@ from app.dto.mypage import (
 )
 
 
+def _extract_emotion_scores(scores) -> Dict[str, float]:
+    """
+    emotion_score_timeline의 값을 안전하게 파싱합니다.
+    list 형태 [neutral, happy, surprise, sad, angry] 또는
+    dict 형태 {'neutral': 0.5, 'happy': 0.3, ...} 모두 지원합니다.
+    """
+    emotion_order = ['neutral', 'happy', 'surprise', 'sad', 'angry']
+    result = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
+
+    if isinstance(scores, dict):
+        for emotion in emotion_order:
+            result[emotion] = float(scores.get(emotion, 0.0))
+    elif isinstance(scores, (list, tuple)) and len(scores) >= 5:
+        for i, emotion in enumerate(emotion_order):
+            result[emotion] = float(scores[i])
+    elif isinstance(scores, (list, tuple)):
+        # 5개 미만인 경우 있는 만큼만 처리
+        for i, emotion in enumerate(emotion_order[:len(scores)]):
+            result[emotion] = float(scores[i])
+
+    return result
+
+
 class MypageService:
     @staticmethod
     @transactional
@@ -50,18 +78,21 @@ class MypageService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        user.name = name
+        if name is not None:
+            user.name = name
 
-        user.profile_image_id = profile_image_id
+        if profile_image_id is not None:
+            user.profile_image_id = profile_image_id
 
-        UserFavoriteGenre.query.filter_by(user_id=user_id).delete()
+        if favorite_genres is not None:
+            UserFavoriteGenre.query.filter_by(user_id=user_id).delete()
 
-        for genre in favorite_genres:
-            new_genre = UserFavoriteGenre(
-                user_id=user_id,
-                genre=genre
-            )
-            db.session.add(new_genre)
+            for genre in favorite_genres:
+                new_genre = UserFavoriteGenre(
+                    user_id=user_id,
+                    genre=genre
+                )
+                db.session.add(new_genre)
 
     @staticmethod
     @transactional_readonly
@@ -198,15 +229,24 @@ class MypageService:
             'angry': []
         }
 
-        sorted_keys = sorted(emotion_score_timeline.keys(), key=lambda x: int(x))
+        # NOTE: 키가 정수로 변환 가능한 것만 필터링
+        valid_keys = []
+        for key in emotion_score_timeline.keys():
+            try:
+                int(key)
+                valid_keys.append(key)
+            except (ValueError, TypeError):
+                continue
+
+        sorted_keys = sorted(valid_keys, key=lambda x: int(x))
 
         for idx, ms_key in enumerate(sorted_keys):
-            scores = emotion_score_timeline[ms_key]
-            emotion_lists['neutral'].append({'x': idx, 'y': scores[0]})
-            emotion_lists['happy'].append({'x': idx, 'y': scores[1]})
-            emotion_lists['surprise'].append({'x': idx, 'y': scores[2]})
-            emotion_lists['sad'].append({'x': idx, 'y': scores[3]})
-            emotion_lists['angry'].append({'x': idx, 'y': scores[4]})
+            scores = _extract_emotion_scores(emotion_score_timeline[ms_key])
+            emotion_lists['neutral'].append({'x': idx, 'y': scores['neutral']})
+            emotion_lists['happy'].append({'x': idx, 'y': scores['happy']})
+            emotion_lists['surprise'].append({'x': idx, 'y': scores['surprise']})
+            emotion_lists['sad'].append({'x': idx, 'y': scores['sad']})
+            emotion_lists['angry'].append({'x': idx, 'y': scores['angry']})
 
         data_num = len(sorted_keys)
 
@@ -268,11 +308,12 @@ class MypageService:
             emotion_score_timeline = doc.get('emotion_score_timeline', {})
 
             for ms_key, scores in emotion_score_timeline.items():
-                total_seconds['neutral'] += scores[0] * 0.1
-                total_seconds['happy'] += scores[1] * 0.1
-                total_seconds['surprise'] += scores[2] * 0.1
-                total_seconds['sad'] += scores[3] * 0.1
-                total_seconds['angry'] += scores[4] * 0.1
+                parsed_scores = _extract_emotion_scores(scores)
+                total_seconds['neutral'] += parsed_scores['neutral'] * 0.1
+                total_seconds['happy'] += parsed_scores['happy'] * 0.1
+                total_seconds['surprise'] += parsed_scores['surprise'] * 0.1
+                total_seconds['sad'] += parsed_scores['sad'] * 0.1
+                total_seconds['angry'] += parsed_scores['angry'] * 0.1
 
         total_time = sum(total_seconds.values())
 
@@ -326,11 +367,12 @@ class MypageService:
 
             emotion_score_timeline = doc.get('emotion_score_timeline', {})
             for ms_key, scores in emotion_score_timeline.items():
-                category_emotions[category]['neutral'] += scores[0]
-                category_emotions[category]['happy'] += scores[1]
-                category_emotions[category]['surprise'] += scores[2]
-                category_emotions[category]['sad'] += scores[3]
-                category_emotions[category]['angry'] += scores[4]
+                parsed_scores = _extract_emotion_scores(scores)
+                category_emotions[category]['neutral'] += parsed_scores['neutral']
+                category_emotions[category]['happy'] += parsed_scores['happy']
+                category_emotions[category]['surprise'] += parsed_scores['surprise']
+                category_emotions[category]['sad'] += parsed_scores['sad']
+                category_emotions[category]['angry'] += parsed_scores['angry']
 
         categories = []
         for category, emotions in category_emotions.items():
@@ -398,11 +440,12 @@ class MypageService:
 
             emotion_score_timeline = doc.get('emotion_score_timeline', {})
             for ms_key, scores in emotion_score_timeline.items():
-                period_emotions[label]['neutral'] += scores[0]
-                period_emotions[label]['happy'] += scores[1]
-                period_emotions[label]['surprise'] += scores[2]
-                period_emotions[label]['sad'] += scores[3]
-                period_emotions[label]['angry'] += scores[4]
+                parsed_scores = _extract_emotion_scores(scores)
+                period_emotions[label]['neutral'] += parsed_scores['neutral']
+                period_emotions[label]['happy'] += parsed_scores['happy']
+                period_emotions[label]['surprise'] += parsed_scores['surprise']
+                period_emotions[label]['sad'] += parsed_scores['sad']
+                period_emotions[label]['angry'] += parsed_scores['angry']
 
         data_points = []
         for label in sorted(period_emotions.keys()):
@@ -490,11 +533,12 @@ class MypageService:
 
             emotion_score_timeline = doc.get('emotion_score_timeline', {})
             for ms_key, scores in emotion_score_timeline.items():
-                category_emotions_map[category]['neutral'] += scores[0]
-                category_emotions_map[category]['happy'] += scores[1]
-                category_emotions_map[category]['surprise'] += scores[2]
-                category_emotions_map[category]['sad'] += scores[3]
-                category_emotions_map[category]['angry'] += scores[4]
+                parsed_scores = _extract_emotion_scores(scores)
+                category_emotions_map[category]['neutral'] += parsed_scores['neutral']
+                category_emotions_map[category]['happy'] += parsed_scores['happy']
+                category_emotions_map[category]['surprise'] += parsed_scores['surprise']
+                category_emotions_map[category]['sad'] += parsed_scores['sad']
+                category_emotions_map[category]['angry'] += parsed_scores['angry']
 
         category_emotions = []
         for category, emotions in category_emotions_map.items():
@@ -534,11 +578,12 @@ class MypageService:
         for doc in watching_data_docs:
             emotion_score_timeline = doc.get('emotion_score_timeline', {})
             for ms_key, scores in emotion_score_timeline.items():
-                total_emotions['neutral'] += scores[0]
-                total_emotions['happy'] += scores[1]
-                total_emotions['surprise'] += scores[2]
-                total_emotions['sad'] += scores[3]
-                total_emotions['angry'] += scores[4]
+                parsed_scores = _extract_emotion_scores(scores)
+                total_emotions['neutral'] += parsed_scores['neutral']
+                total_emotions['happy'] += parsed_scores['happy']
+                total_emotions['surprise'] += parsed_scores['surprise']
+                total_emotions['sad'] += parsed_scores['sad']
+                total_emotions['angry'] += parsed_scores['angry']
 
         most_felt_emotion = max(total_emotions, key=total_emotions.get) if any(total_emotions.values()) else 'neutral'
 
@@ -550,3 +595,20 @@ class MypageService:
         )
 
         return result.to_dict()
+
+    @staticmethod
+    @transactional
+    def withdraw_user(user_id: str):
+        user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
+        if not user:
+            raise BusinessError(APIError.USER_NOT_FOUND)
+
+        VideoLike.query.filter_by(user_id=user_id).delete()
+        VideoViewLog.query.filter_by(user_id=user_id).delete()
+        VideoRequest.query.filter_by(user_id=user_id).delete()
+        UserFavoriteGenre.query.filter_by(user_id=user_id).delete()
+        UserPointHistory.query.filter_by(user_id=user_id).delete()
+
+        Comment.query.filter_by(user_id=user_id).update({'is_deleted': 1})
+
+        user.is_deleted = 1
