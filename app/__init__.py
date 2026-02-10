@@ -30,6 +30,8 @@ def create_app(config_name='default'):
     config_class = config.get(config_name, config['default'])
     app.config.from_object(config_class)
 
+    app.json.ensure_ascii = False
+
     if app.config.get('SENTRY_DSN'):
         sentry_sdk.init(
             dsn=app.config['SENTRY_DSN'],

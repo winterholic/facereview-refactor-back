@@ -100,7 +100,7 @@ class VideoDistribution:
 
     recommendation_scores: RecommendationScores = field(default_factory=RecommendationScores)
 
-    dominant_emotion: str = 'neutral'
+    dominant_emotion: Optional[str] = None
 
     created_at: datetime = field(default_factory=datetime.utcnow)
 
@@ -143,10 +143,10 @@ class VideoDistributionRepository:
         self.collection = db[self.COLLECTION_NAME]
         self.collection.create_index('video_id', unique=True)
 
-    def increment_emotion(self, video_id: str, emotion: str, category: str = None):
+    def increment_emotion(self, video_id: str, emotion: str, category: str = None, duration: int = 0):
         """
         watch_frame 시 호출되어 감정 카운트를 증가시키고
-        emotion_averages, recommendation_scores를 재계산함.
+        emotion_averages, recommendation_scores, average_completion_rate를 재계산함.
         """
         if emotion not in EMOTION_LABELS:
             raise ValueError(f"Invalid emotion: {emotion}")
@@ -162,9 +162,10 @@ class VideoDistributionRepository:
                 '$setOnInsert': {
                     'video_id': video_id,
                     'category': category,
+                    'duration': duration,
                     'emotion_averages': {e: 0.0 for e in EMOTION_LABELS},
                     'recommendation_scores': {e: 0.0 for e in EMOTION_LABELS},
-                    'dominant_emotion': 'neutral',
+                    'dominant_emotion': None,
                     'average_completion_rate': 0.0,
                     'created_at': datetime.utcnow()
                 },
@@ -175,15 +176,15 @@ class VideoDistributionRepository:
             upsert=True
         )
 
-        # NOTE: 2단계 - emotion_averages, recommendation_scores 재계산
-        self._recalculate_scores(video_id, category)
+        # NOTE: 2단계 - emotion_averages, recommendation_scores, average_completion_rate 재계산
+        self._recalculate_scores(video_id, category, duration)
 
-        logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}, category={category}")
+        logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}, category={category}, duration={duration}")
 
-    def _recalculate_scores(self, video_id: str, category: str = None):
+    def _recalculate_scores(self, video_id: str, category: str = None, duration: int = 0):
         """
         emotion_counts와 total_frames를 기반으로
-        emotion_averages와 recommendation_scores를 재계산함.
+        emotion_averages, recommendation_scores, average_completion_rate를 재계산함.
         """
         doc = self.collection.find_one({'video_id': video_id})
         if not doc:
@@ -198,6 +199,10 @@ class VideoDistributionRepository:
         # NOTE: 카테고리가 파라미터로 안 왔으면 문서에서 가져옴
         if not category:
             category = doc.get('category', 'etc')
+
+        # NOTE: duration이 파라미터로 안 왔으면 문서에서 가져옴
+        if not duration:
+            duration = doc.get('duration', 0)
 
         # NOTE: emotion_averages 계산 (각 감정 비율)
         emotion_averages = {}
@@ -214,6 +219,12 @@ class VideoDistributionRepository:
         # NOTE: dominant_emotion 결정 (recommendation_scores 기준)
         dominant_emotion = max(recommendation_scores, key=recommendation_scores.get)
 
+        # NOTE: average_completion_rate 계산 (0.5초 간격이므로 duration * 2가 완주 프레임 수)
+        average_completion_rate = 0.0
+        if duration > 0:
+            expected_frames = duration * 2
+            average_completion_rate = round(min(total_frames / expected_frames, 1.0), 4)
+
         # NOTE: 계산된 값들 업데이트
         self.collection.update_one(
             {'video_id': video_id},
@@ -222,7 +233,9 @@ class VideoDistributionRepository:
                     'emotion_averages': emotion_averages,
                     'recommendation_scores': recommendation_scores,
                     'dominant_emotion': dominant_emotion,
-                    'category': category
+                    'average_completion_rate': average_completion_rate,
+                    'category': category,
+                    'duration': duration
                 }
             }
         )

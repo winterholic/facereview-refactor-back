@@ -17,6 +17,7 @@ import json
 logger = get_logger('socket')
 
 VIDEO_CATEGORY_TTL = 86400  # 24시간
+VIDEO_DURATION_TTL = 86400  # 24시간
 
 DEDUPE_TTL_SECONDS = 3600  # 1시간
 
@@ -474,6 +475,33 @@ def _get_video_category(video_id: str) -> str:
         return 'etc'
 
 
+def _get_video_duration(video_id: str) -> int:
+    try:
+        redis_key = f"facereview:video:{video_id}:duration"
+
+        if redis_client:
+            cached_duration = redis_client.get(redis_key)
+            if cached_duration:
+                return int(cached_duration.decode('utf-8') if isinstance(cached_duration, bytes) else cached_duration)
+
+        video = Video.query.filter_by(video_id=video_id).first()
+        if not video:
+            logger.warning(f"Video not found for duration: {video_id}")
+            return 0
+
+        duration = video.duration or 0
+
+        if redis_client:
+            redis_client.setex(redis_key, VIDEO_DURATION_TTL, str(duration))
+            logger.debug(f"Video duration cached: {video_id} -> {duration}")
+
+        return duration
+
+    except Exception as e:
+        logger.error(f"비디오 duration 조회 중 오류 발생: {e}")
+        return 0
+
+
 def _check_dedupe(video_view_log_id: str, youtube_running_time: int) -> bool:
     """
     동일 세션에서 같은 초(second)에 대해 중복 집계를 방지합니다.
@@ -548,14 +576,16 @@ def _update_realtime_statistics(
 
         # 3. video_distribution 업데이트 (카테고리 기반 recommendation_scores 계산 포함)
         category = _get_video_category(video_id)
+        video_duration = _get_video_duration(video_id)
         video_dist_repo = VideoDistributionRepository(extensions.mongo_db)
         video_dist_repo.increment_emotion(
             video_id=video_id,
             emotion=most_emotion,
-            category=category
+            category=category,
+            duration=video_duration
         )
 
-        logger.info(f"[REALTIME_SAVE] 완료: {video_view_log_id}, time_key={time_key_preview}, emotion={most_emotion}, category={category}")
+        logger.info(f"[REALTIME_SAVE] 완료: {video_view_log_id}, time_key={time_key_preview}, emotion={most_emotion}, category={category}, duration={video_duration}")
 
     except Exception as e:
         logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)

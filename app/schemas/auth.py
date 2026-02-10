@@ -58,6 +58,14 @@ class LoginResponseSchema(Schema):
     access_token = fields.String(required=True, metadata={'description': 'JWT 액세스 토큰'})
     refresh_token = fields.String(required=True, metadata={'description': 'JWT 리프레시 토큰'})
 
+
+class AccessTokenResponseSchema(Schema):
+    access_token = fields.String(required=True, metadata={'description': 'JWT 액세스 토큰'})
+
+class TestTokenResponseSchema(Schema):
+    access_token = fields.String(required=True, metadata={'description': 'JWT 액세스 토큰'})
+    refresh_token = fields.String(required=True, metadata={'description': 'JWT 리프레시 토큰'})
+
 class CheckResponseSchema(Schema):
     is_duplicate = fields.Boolean(metadata={'description': '중복 여부 (True: 중복됨/로그인으로, False: 사용가능/회원가입으로)'})
     message = fields.String(metadata={'description': '안내 메시지'})
