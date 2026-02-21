@@ -1,9 +1,11 @@
+import uuid
+import random
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 from flask import current_app
 from sqlalchemy import desc, func, or_
 
-from common.extensions import db, mongo_client
+from common.extensions import db, mongo_client, mongo_db
 from common.decorator.db_decorators import transactional, transactional_readonly
 from common.exception.exceptions import BusinessError
 from common.enum.error_code import APIError
@@ -17,6 +19,7 @@ from app.models.comment import Comment
 from app.models.video_like import VideoLike
 from app.models.video_view_log import VideoViewLog
 from app.models.mongodb.video_distribution import VideoDistributionRepository, VideoDistribution, EmotionAverages, RecommendationScores
+from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages
 
 from app.dto.admin import (
     MessageResponseDto, ApproveVideoResponseDto,
@@ -641,3 +644,162 @@ class AdminService:
 
         result_dto = RecentActivityListDto(activities=activity_dtos)
         return result_dto.to_dict()
+
+    @staticmethod
+    def generate_dummy_data(user_id: str) -> dict:
+        all_videos = Video.query.filter(Video.is_deleted == 0, Video.duration > 0).all()
+        if not all_videos:
+            raise BusinessError(APIError.VIDEO_NOT_FOUND, "더미 데이터를 생성할 영상이 없습니다.")
+
+        videos = random.sample(all_videos, min(30, len(all_videos)))
+
+        watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
+        video_dist_repo = VideoDistributionRepository(mongo_db)
+
+        created_video_ids = []
+
+        for video in videos:
+            try:
+                category = video.category.value if hasattr(video.category, 'value') else str(video.category)
+                frames = _generate_session_frames(category, video.duration)
+                stats = _compute_session_stats(frames)
+
+                most_emotion_timeline = {f['time_key']: f['dominant'] for f in frames}
+                emotion_score_timeline = {
+                    f['time_key']: [
+                        f['scores']['neutral'],
+                        f['scores']['happy'],
+                        f['scores']['surprise'],
+                        f['scores']['sad'],
+                        f['scores']['angry'],
+                    ]
+                    for f in frames
+                }
+
+                created_at = datetime.utcnow() - timedelta(
+                    days=random.randint(0, 90),
+                    hours=random.randint(0, 23),
+                    minutes=random.randint(0, 59)
+                )
+                video_view_log_id = str(uuid.uuid4())
+
+                watching_data = YoutubeWatchingData(
+                    user_id=user_id,
+                    video_id=video.video_id,
+                    video_view_log_id=video_view_log_id,
+                    created_at=created_at,
+                    completion_rate=1.0,
+                    dominant_emotion=stats['dominant'],
+                    emotion_percentages=EmotionPercentages(**stats['percentages']),
+                    most_emotion_timeline=most_emotion_timeline,
+                    emotion_score_timeline=emotion_score_timeline,
+                )
+                watching_data_repo.insert(watching_data)
+
+                view_log = VideoViewLog(
+                    video_view_log_id=video_view_log_id,
+                    user_id=user_id,
+                    video_id=video.video_id,
+                    created_at=created_at,
+                    updated_at=created_at,
+                )
+                db.session.add(view_log)
+                db.session.commit()
+
+                #NOTE: youtube_watching_data 삽입 후 video_distribution 재계산
+                from app.services.watching_data_service import WatchingDataService
+                WatchingDataService._update_video_distribution(video_dist_repo, watching_data_repo, video.video_id)
+
+                created_video_ids.append(video.video_id)
+
+            except Exception as e:
+                db.session.rollback()
+                current_app.logger.error(f"[dummy] video_id={video.video_id} 생성 실패: {e}")
+                continue
+
+        return {
+            'message': f'더미 데이터 생성 완료 ({len(created_video_ids)}개 영상)',
+            'created_count': len(created_video_ids),
+            'user_id': user_id,
+            'video_ids': created_video_ids,
+        }
+
+
+# ── 더미 데이터 생성 헬퍼 ─────────────────────────────────────────────────────
+
+_EMOTIONS = ['neutral', 'happy', 'surprise', 'sad', 'angry']
+
+_CATEGORY_WEIGHTS = {
+    'drama':       {'neutral': 0.5, 'happy': 2.5, 'surprise': 2.0, 'sad': 3.0, 'angry': 2.0},
+    'eating':      {'neutral': 1.0, 'happy': 4.0, 'surprise': 2.5, 'sad': 0.2, 'angry': 0.5},
+    'travel':      {'neutral': 0.8, 'happy': 3.5, 'surprise': 3.0, 'sad': 0.5, 'angry': 0.3},
+    'cook':        {'neutral': 2.5, 'happy': 3.0, 'surprise': 1.5, 'sad': 0.3, 'angry': 0.5},
+    'show':        {'neutral': 0.3, 'happy': 4.5, 'surprise': 2.5, 'sad': 1.0, 'angry': 0.8},
+    'information': {'neutral': 3.0, 'happy': 1.5, 'surprise': 2.5, 'sad': 0.5, 'angry': 1.5},
+    'horror':      {'neutral': 0.5, 'happy': 0.3, 'surprise': 5.0, 'sad': 1.5, 'angry': 2.0},
+    'exercise':    {'neutral': 2.0, 'happy': 3.5, 'surprise': 1.5, 'sad': 0.5, 'angry': 1.5},
+    'vlog':        {'neutral': 2.5, 'happy': 2.5, 'surprise': 1.5, 'sad': 1.5, 'angry': 1.0},
+    'game':        {'neutral': 1.5, 'happy': 3.0, 'surprise': 2.5, 'sad': 1.5, 'angry': 2.5},
+    'sports':      {'neutral': 1.0, 'happy': 3.5, 'surprise': 4.0, 'sad': 1.0, 'angry': 1.5},
+    'music':       {'neutral': 1.5, 'happy': 4.0, 'surprise': 2.0, 'sad': 2.5, 'angry': 1.0},
+    'animal':      {'neutral': 1.0, 'happy': 4.5, 'surprise': 3.0, 'sad': 0.8, 'angry': 0.2},
+    'beauty':      {'neutral': 2.0, 'happy': 3.5, 'surprise': 2.5, 'sad': 0.5, 'angry': 0.5},
+    'comedy':      {'neutral': 0.2, 'happy': 5.0, 'surprise': 2.0, 'sad': 0.3, 'angry': 0.5},
+    'etc':         {'neutral': 2.5, 'happy': 2.0, 'surprise': 2.0, 'sad': 1.5, 'angry': 1.5},
+}
+_DEFAULT_WEIGHTS = {'neutral': 2.0, 'happy': 2.0, 'surprise': 2.0, 'sad': 2.0, 'angry': 2.0}
+
+
+def _pick_dominant(category: str, prev: str = None) -> str:
+    #NOTE: 78% 확률로 이전 프레임과 같은 감정 (시간적 연속성)
+    if prev and random.random() < 0.78:
+        return prev
+    #NOTE: 12% 확률로 카테고리 무관 랜덤 감정 (mood shift)
+    if random.random() < 0.12:
+        return random.choice(_EMOTIONS)
+    w = _CATEGORY_WEIGHTS.get(category, _DEFAULT_WEIGHTS)
+    return random.choices(_EMOTIONS, weights=[w[e] for e in _EMOTIONS], k=1)[0]
+
+
+def _make_frame_scores(dominant: str) -> dict:
+    #NOTE: 실제 모델 특성 반영: dominant 감정은 72~95% 수준으로 치우침
+    dominant_score = random.uniform(72.0, 95.0)
+    remaining = 100.0 - dominant_score
+    others = [e for e in _EMOTIONS if e != dominant]
+    #NOTE: 제곱 랜덤으로 나머지 감정도 편중되게 분배
+    raw = [random.random() ** 2 for _ in others]
+    total = sum(raw) or 1.0
+    scores = {dominant: dominant_score}
+    for e, r in zip(others, raw):
+        scores[e] = remaining * r / total
+    s = sum(scores.values())
+    return {e: round(scores[e] / s * 100, 2) for e in _EMOTIONS}
+
+
+def _generate_session_frames(category: str, duration: int) -> list:
+    frames = []
+    prev = None
+    for i in range(duration * 2):  # 0.5초 간격 = 초당 2프레임
+        dominant = _pick_dominant(category, prev)
+        scores = _make_frame_scores(dominant)
+        frames.append({
+            'time_key': str(i * 50),  # centisecond 단위: 0, 50, 100, ...
+            'scores': scores,
+            'dominant': dominant,
+        })
+        prev = dominant
+    return frames
+
+
+def _compute_session_stats(frames: list) -> dict:
+    totals = {e: 0.0 for e in _EMOTIONS}
+    for f in frames:
+        for e in _EMOTIONS:
+            totals[e] += f['scores'][e]
+    n = len(frames)
+    #NOTE: 0-100 스케일 프레임 → 0-1 비율 (WatchingDataService와 동일 로직)
+    percentages = {e: round(totals[e] / n / 100.0, 3) for e in _EMOTIONS}
+    dominant = max(percentages, key=percentages.get)
+    return {'percentages': percentages, 'dominant': dominant}
+
+

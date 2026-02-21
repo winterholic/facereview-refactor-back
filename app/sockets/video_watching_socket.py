@@ -394,13 +394,6 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
 
 
 def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_time: float):
-    """
-    Redis에서 타임라인 감정 데이터 조회.
-    Returns:
-        - dict: 해당 시간의 감정 데이터
-        - "EMPTY": Redis에 캐시는 있지만 해당 시간 데이터가 없음 (MongoDB fallback 하지 말 것)
-        - None: Redis에 캐시 자체가 없음 (MongoDB fallback 필요)
-    """
     try:
         redis_key = f"facereview:session:{video_view_log_id}:timeline"
 
@@ -441,10 +434,6 @@ def _delete_timeline_cache(video_view_log_id: str):
 
 
 def _get_video_category(video_id: str) -> str:
-    """
-    비디오 카테고리를 Redis 캐시에서 조회하거나, 없으면 RDB에서 조회 후 캐싱.
-    recommendation_scores 계산에 사용됨.
-    """
     try:
         redis_key = f"facereview:video:{video_id}:category"
 
@@ -503,10 +492,6 @@ def _get_video_duration(video_id: str) -> int:
 
 
 def _check_dedupe(video_view_log_id: str, youtube_running_time: int) -> bool:
-    """
-    동일 세션에서 같은 초(second)에 대해 중복 집계를 방지합니다.
-    Redis SETNX를 사용하여 이미 집계된 경우 False를 반환합니다.
-    """
     try:
         if not redis_client:
             return True  # Redis가 없으면 항상 집계 허용
@@ -537,12 +522,7 @@ def _update_realtime_statistics(
     most_emotion: str,
     duration: int = None
 ):
-    """
-    watch_frame 이벤트에서 실시간으로 3개 컬렉션을 업데이트합니다.
-    - youtube_watching_data: 개인 시청 기록 (프레임별 타임라인)
-    - video_timeline_emotion_count: 해당 초의 감정 카운트 증가
-    - video_distribution: 해당 영상의 전체 감정 카운트 증가
-    """
+
     try:
         if extensions.mongo_db is None:
             logger.error("[SAVE] extensions.mongo_db is None!")
@@ -592,10 +572,6 @@ def _update_realtime_statistics(
 
 
 def _create_video_view_log(video_view_log_id: str, user_id: str, video_id: str):
-    """
-    RDB video_view_log 테이블에 시청 기록을 저장합니다.
-    watch_frame 최초 호출 시 1회만 실행됩니다.
-    """
     try:
         # 이미 존재하는지 확인
         existing = VideoViewLog.query.filter_by(video_view_log_id=video_view_log_id).first()

@@ -47,7 +47,9 @@ class SignupRequestSchema(Schema):
                 error="지원하지 않는 장르입니다."
             )
         ),
-        metadata={'description': '선호 장르 목록'}
+        required=True,
+        validate=validate.Length(min=1, error="최소 1개 이상의 선호 장르를 선택해야 합니다."),
+        metadata={'description': '선호 장르 목록 (최소 1개 이상)'}
     )
 
 class LoginRequestSchema(Schema):

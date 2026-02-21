@@ -10,6 +10,7 @@ MariaDB SQLAlchemy Models (one model per file):
 - VideoViewLog: 영상 시청 기록
 - VideoRequest: 영상 요청
 - VideoLike: 영상 좋아요
+- VideoBookmark: 영상 북마크
 - Comment: 댓글
 
 MongoDB Collections:
@@ -29,6 +30,7 @@ from app.models.video import Video
 from app.models.video_view_log import VideoViewLog
 from app.models.video_request import VideoRequest
 from app.models.video_like import VideoLike
+from app.models.video_bookmark import VideoBookmark
 from app.models.comment import Comment
 
 # MongoDB Models
@@ -51,6 +53,7 @@ __all__ = [
     'VideoViewLog',
     'VideoRequest',
     'VideoLike',
+    'VideoBookmark',
     'Comment',
 
     # MongoDB Models

@@ -68,6 +68,12 @@ class Video(db.Model):
         cascade='all, delete-orphan',
         lazy='dynamic'
     )
+    video_bookmarks = relationship(
+        'VideoBookmark',
+        back_populates='video',
+        cascade='all, delete-orphan',
+        lazy='dynamic'
+    )
 
     def __repr__(self):
         return f'<Video {self.title} ({self.youtube_url})>'

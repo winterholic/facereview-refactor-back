@@ -82,3 +82,10 @@ class VideoRecommendRequestSchema(Schema):
         validate=validate.Length(min=1),
         metadata={'description': '추천할 유튜브 URL 리스트'}
     )
+
+class BookmarkToggleRequestSchema(Schema):
+    video_id = fields.String(required=True, metadata={'description': '북마크할 영상 UUID'})
+
+class BookmarkToggleResponseSchema(Schema):
+    is_bookmarked = fields.Bool(metadata={'description': '북마크 등록 여부 (true: 추가, false: 해제)'})
+    message = fields.String(metadata={'description': '처리 결과 메시지'})

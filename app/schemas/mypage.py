@@ -21,7 +21,8 @@ class UpdateProfileRequestSchema(Schema):
     profile_image_id = fields.Integer(metadata={'description': '프로필 이미지 ID'})
     favorite_genres = fields.List(
         fields.String(validate=validate.OneOf([e.value for e in GenreEnum])),
-        metadata={'description': '선호 장르 목록(기존 데이터 무조건 보내주기)'}
+        validate=validate.Length(min=1, error="최소 1개 이상의 선호 장르를 선택해야 합니다."),
+        metadata={'description': '선호 장르 목록 (보낼 경우 최소 1개 이상, 기존 데이터 무조건 포함)'}
     )
 
 class VerifyEmailCodeRequestSchema(Schema):

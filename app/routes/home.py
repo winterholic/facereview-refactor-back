@@ -10,7 +10,9 @@ from app.schemas.home import (
     VideoRecommendRequestSchema,
     AllVideoResponseSchema,
     SearchVideoResponseSchema,
-    SearchVideoRequestSchema
+    SearchVideoRequestSchema,
+    BookmarkToggleRequestSchema,
+    BookmarkToggleResponseSchema
 )
 from app.services.home_service import HomeService
 
@@ -67,6 +69,28 @@ def get_all_videos(query_args):
     emotion = query_args['emotion']
 
     return HomeService.get_all_videos(page, size, emotion)
+
+
+@home_blueprint.route('/bookmark', methods=['POST'])
+@login_required
+@home_blueprint.arguments(BookmarkToggleRequestSchema)
+@home_blueprint.response(200, BookmarkToggleResponseSchema)
+@home_blueprint.doc(security=[{"BearerAuth": []}])
+def toggle_bookmark(data):
+    return HomeService.toggle_bookmark(g.user_id, data['video_id'])
+
+
+@home_blueprint.route('/bookmark', methods=['GET'])
+@login_required
+@home_blueprint.arguments(EmotionVideoQuerySchema, location='query')
+@home_blueprint.response(200, AllVideoResponseSchema)
+@home_blueprint.doc(security=[{"BearerAuth": []}])
+def get_bookmark_videos(query_args):
+    page = query_args['page']
+    size = query_args['size']
+    emotion = query_args['emotion']
+
+    return HomeService.get_bookmark_videos(g.user_id, page, size, emotion)
 
 
 @home_blueprint.route('/video/recommend', methods=['POST'])

@@ -298,3 +298,10 @@ class RecentActivitySchema(Schema):
 
 class RecentActivitiesResponseSchema(Schema):
     activities = fields.List(fields.Nested(RecentActivitySchema), metadata={'description': '최근 활동 목록'})
+
+
+class GenerateDummyDataResponseSchema(Schema):
+    message = fields.String(metadata={'description': '처리 결과 메시지'})
+    created_count = fields.Integer(metadata={'description': '생성된 시청 기록 수'})
+    user_id = fields.String(metadata={'description': '데이터가 생성된 유저 ID'})
+    video_ids = fields.List(fields.String(), metadata={'description': '더미 데이터가 생성된 영상 ID 목록'})

@@ -17,7 +17,8 @@ from app.schemas.admin import (
     DeleteCommentResponseSchema,
     DashboardOverviewResponseSchema,
     PopularVideosResponseSchema,
-    RecentActivitiesResponseSchema
+    RecentActivitiesResponseSchema,
+    GenerateDummyDataResponseSchema
 )
 from app.services.admin_service import AdminService
 from common.decorator.auth_decorators import login_required
@@ -215,3 +216,12 @@ def get_popular_videos():
 @admin_blueprint.doc(security=[{"BearerAuth": []}])
 def get_recent_activities():
     return AdminService.get_recent_activities()
+
+
+@admin_blueprint.route('/dummy-data', methods=['POST'])
+@login_required
+@admin_required
+@admin_blueprint.response(200, GenerateDummyDataResponseSchema)
+@admin_blueprint.doc(security=[{"BearerAuth": []}])
+def generate_dummy_data():
+    return AdminService.generate_dummy_data(g.user_id)
