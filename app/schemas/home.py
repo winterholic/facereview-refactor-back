@@ -19,6 +19,11 @@ class SearchVideoRequestSchema(Schema):
         required=True,  # 필수 조건
         metadata={'description': '검색어'}
     )
+    emotions = fields.List(
+        fields.String(validate=validate.OneOf(['happy', 'sad', 'neutral', 'surprise', 'angry'])),
+        load_default=[],
+        metadata={'description': '감정 필터 리스트 (미선택 시 전체 조회). ?emotions=happy&emotions=sad 형태로 전달'}
+    )
     
 class VideoResponseSchema(Schema):
     video_id = fields.String(metadata={'description': '영상 UUID'})

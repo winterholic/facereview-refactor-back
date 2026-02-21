@@ -1,10 +1,12 @@
 import uuid
+import datetime as dt
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from flask import current_app
 from werkzeug.security import generate_password_hash
 
 from common.extensions import db, redis_client, mongo_db
+from common.utils import decode_token
 from common.decorator.db_decorators import transactional, transactional_readonly
 from common.exception.exceptions import BusinessError
 from common.enum.error_code import APIError
@@ -598,10 +600,18 @@ class MypageService:
 
     @staticmethod
     @transactional
-    def withdraw_user(user_id: str):
+    def withdraw_user(user_id: str, refresh_token: str = None):
         user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
+
+        if refresh_token and redis_client:
+            payload = decode_token(refresh_token)
+            exp_timestamp = payload.get('exp')
+            if exp_timestamp:
+                ttl_seconds = int(exp_timestamp - dt.datetime.utcnow().timestamp())
+                if ttl_seconds > 0:
+                    redis_client.setex(f"facereview:blacklist:{refresh_token}", ttl_seconds, "1")
 
         VideoLike.query.filter_by(user_id=user_id).delete()
         VideoViewLog.query.filter_by(user_id=user_id).delete()

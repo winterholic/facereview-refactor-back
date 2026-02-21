@@ -33,8 +33,9 @@ def get_search_videos(query_args):
     size = query_args['size']
     keyword_type = query_args['keyword_type']
     keyword = query_args['keyword']
+    emotions = query_args.get('emotions', [])
 
-    return HomeService.get_search_videos(page, size, keyword_type, keyword)
+    return HomeService.get_search_videos(page, size, keyword_type, keyword, emotions)
 
 @home_blueprint.route('/personalized', methods=['GET'])
 @login_required

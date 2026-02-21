@@ -1,0 +1,198 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771645309201,
+  "projectRoot": "F:\\mydevelop\\new-facereview",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "app",
+      "docs",
+      "examples",
+      "scripts",
+      "tests"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "app": {
+      "path": "app",
+      "purpose": "Application code",
+      "fileCount": 1,
+      "lastAccessed": 1771645308680,
+      "keyFiles": [
+        "__init__.py"
+      ]
+    },
+    "common": {
+      "path": "common",
+      "purpose": null,
+      "fileCount": 3,
+      "lastAccessed": 1771645308681,
+      "keyFiles": [
+        "celery_app.py",
+        "extensions.py",
+        "__init__.py"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 16,
+      "lastAccessed": 1771645308681,
+      "keyFiles": [
+        "ADMIN_FEATURES.md",
+        "API.md",
+        "async-debugging-guide.md",
+        "capture.png",
+        "CELERY_SETUP.md"
+      ]
+    },
+    "examples": {
+      "path": "examples",
+      "purpose": "Example code",
+      "fileCount": 1,
+      "lastAccessed": 1771645308682,
+      "keyFiles": [
+        "saga_pattern_example.py"
+      ]
+    },
+    "origin-codes": {
+      "path": "origin-codes",
+      "purpose": null,
+      "fileCount": 9,
+      "lastAccessed": 1771645308682,
+      "keyFiles": [
+        "admin.py",
+        "gate.py",
+        "home.py",
+        "jwtfunction.py",
+        "mypage.py"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 1,
+      "lastAccessed": 1771645308683,
+      "keyFiles": [
+        "deploy.sh"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 0,
+      "lastAccessed": 1771645308683,
+      "keyFiles": []
+    },
+    "__pycache__": {
+      "path": "__pycache__",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1771645308683,
+      "keyFiles": [
+        "run.cpython-310.pyc"
+      ]
+    },
+    "app\\models": {
+      "path": "app\\models",
+      "purpose": "Data models",
+      "fileCount": 9,
+      "lastAccessed": 1771645308684,
+      "keyFiles": [
+        "comment.py",
+        "user.py",
+        "user_favorite_genre.py"
+      ]
+    },
+    "app\\routes": {
+      "path": "app\\routes",
+      "purpose": "Route handlers",
+      "fileCount": 8,
+      "lastAccessed": 1771645308684,
+      "keyFiles": [
+        "admin.py",
+        "auth.py",
+        "base.py"
+      ]
+    },
+    "app\\schemas": {
+      "path": "app\\schemas",
+      "purpose": "Schema definitions",
+      "fileCount": 7,
+      "lastAccessed": 1771645308684,
+      "keyFiles": [
+        "admin.py",
+        "auth.py",
+        "common_schema.py"
+      ]
+    },
+    "app\\services": {
+      "path": "app\\services",
+      "purpose": "Business logic services",
+      "fileCount": 7,
+      "lastAccessed": 1771645308684,
+      "keyFiles": [
+        "admin_service.py",
+        "auth_service.py",
+        "home_service.py"
+      ]
+    },
+    "common\\config": {
+      "path": "common\\config",
+      "purpose": "Configuration files",
+      "fileCount": 3,
+      "lastAccessed": 1771645308684,
+      "keyFiles": [
+        "celery_config.py",
+        "config.py",
+        "__init__.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "C:\\Users\\iuhol\\.claude\\settings.json",
+      "accessCount": 4,
+      "lastAccessed": 1771646097116,
+      "type": "file"
+    },
+    {
+      "path": "C:\\Users\\iuhol\\.claude\\hud\\omc-hud.mjs",
+      "accessCount": 1,
+      "lastAccessed": 1771645719968,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

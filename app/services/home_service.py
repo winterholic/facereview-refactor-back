@@ -21,7 +21,7 @@ class HomeService:
 
     @staticmethod
     @transactional_readonly
-    def get_search_videos(page: int, size: int, keyword_type: str, keyword: str):
+    def get_search_videos(page: int, size: int, keyword_type: str, keyword: str, emotions: list = None):
         #NOTE: Video 테이블에서 LIKE 검색
         query = Video.query.filter_by(is_deleted=0)
 
@@ -37,62 +37,90 @@ class HomeService:
                 )
             )
 
-        total = query.count()
+        if not emotions:
+            total = query.count()
+            videos = query.order_by(Video.created_at.desc()).offset((page - 1) * size).limit(size).all()
 
-        videos = query.order_by(Video.created_at.desc()).offset((page - 1) * size).limit(size).all()
+            if not videos:
+                return {'videos': [], 'total': total, 'page': page, 'size': size, 'has_next': False}
 
-        if not videos:
-            return {
-                'videos': [],
-                'total': total,
-                'page': page,
-                'size': size,
-                'has_next': False
-            }
+            video_dist_repo = VideoDistributionRepository(mongo_db)
+            video_ids = [video.video_id for video in videos]
+            video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
+
+            video_dto_list = []
+            for video in videos:
+                video_distribution = video_stats_dict.get(video.video_id)
+                if not video_distribution:
+                    continue
+
+                dominant_emotion = video_distribution.dominant_emotion or 'neutral'
+                emotion_averages_dict = {
+                    'neutral': video_distribution.emotion_averages.neutral,
+                    'happy': video_distribution.emotion_averages.happy,
+                    'surprise': video_distribution.emotion_averages.surprise,
+                    'sad': video_distribution.emotion_averages.sad,
+                    'angry': video_distribution.emotion_averages.angry
+                }
+                dominant_emotion_per = round(emotion_averages_dict.get(dominant_emotion, 0.0) * 100.0, 2)
+
+                video_dto_list.append(BaseVideoDataDto(
+                    video_id=video.video_id,
+                    youtube_url=video.youtube_url,
+                    title=video.title,
+                    dominant_emotion=dominant_emotion,
+                    dominant_emotion_per=dominant_emotion_per
+                ))
+
+            has_next = (page * size) < total
+            return {'videos': video_dto_list, 'total': total, 'page': page, 'size': size, 'has_next': has_next}
+
+        #NOTE: 감정 필터가 있으면 SQL에서 후보 video_id 전체를 뽑고 MongoDB에서 페이지네이션
+        all_video_ids = [v.video_id for v in query.all()]
+
+        if not all_video_ids:
+            return {'videos': [], 'total': 0, 'page': page, 'size': size, 'has_next': False}
 
         video_dist_repo = VideoDistributionRepository(mongo_db)
-        video_ids = [video.video_id for video in videos]
-        video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
+        mongo_query = {
+            'video_id': {'$in': all_video_ids},
+            'dominant_emotion': {'$in': emotions}
+        }
+
+        total = video_dist_repo.collection.count_documents(mongo_query)
+
+        video_distributions = list(
+            video_dist_repo.collection.find(mongo_query)
+            .sort([('created_at', -1), ('_id', -1)])
+            .skip((page - 1) * size)
+            .limit(size)
+        )
+
+        if not video_distributions:
+            return {'videos': [], 'total': total, 'page': page, 'size': size, 'has_next': False}
+
+        video_distributions_dict = {vd['video_id']: vd for vd in video_distributions}
+        page_video_ids = list(video_distributions_dict.keys())
+
+        videos = Video.query.filter(Video.video_id.in_(page_video_ids)).all()
 
         video_dto_list = []
         for video in videos:
-            video_distribution = video_stats_dict.get(video.video_id)
+            vd = video_distributions_dict.get(video.video_id, {})
+            dominant_emotion = vd.get('dominant_emotion', 'neutral')
+            emotion_averages = vd.get('emotion_averages', {})
+            dominant_emotion_per = round(emotion_averages.get(dominant_emotion, 0.0) * 100.0, 2)
 
-            if not video_distribution:
-                continue
-
-            dominant_emotion = video_distribution.dominant_emotion or 'neutral'
-            emotion_averages_dict = {
-                'neutral': video_distribution.emotion_averages.neutral,
-                'happy': video_distribution.emotion_averages.happy,
-                'surprise': video_distribution.emotion_averages.surprise,
-                'sad': video_distribution.emotion_averages.sad,
-                'angry': video_distribution.emotion_averages.angry
-            }
-
-            dominant_emotion_per = round(
-                emotion_averages_dict.get(dominant_emotion, 0.0) * 100.0,
-                2
-            )
-
-            video_dto = BaseVideoDataDto(
+            video_dto_list.append(BaseVideoDataDto(
                 video_id=video.video_id,
                 youtube_url=video.youtube_url,
                 title=video.title,
                 dominant_emotion=dominant_emotion,
                 dominant_emotion_per=dominant_emotion_per
-            )
-            video_dto_list.append(video_dto)
+            ))
 
         has_next = (page * size) < total
-
-        return {
-            'videos': video_dto_list,
-            'total': total,
-            'page': page,
-            'size': size,
-            'has_next': has_next
-        }
+        return {'videos': video_dto_list, 'total': total, 'page': page, 'size': size, 'has_next': has_next}
 
 
     @staticmethod
