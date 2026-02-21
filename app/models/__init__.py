@@ -32,11 +32,11 @@ from app.models.video_request import VideoRequest
 from app.models.video_like import VideoLike
 from app.models.video_bookmark import VideoBookmark
 from app.models.comment import Comment
+from app.models.user_emotion_dna import UserEmotionDna
 
 # MongoDB Models
 from app.models.mongodb import (
     VideoDistribution,
-    VideoDistributionHistory,
     YoutubeWatchingData,
     VideoTimelineEmotionCount
 )
@@ -55,10 +55,10 @@ __all__ = [
     'VideoLike',
     'VideoBookmark',
     'Comment',
+    'UserEmotionDna',
 
     # MongoDB Models
     'VideoDistribution',
-    'VideoDistributionHistory',
     'YoutubeWatchingData',
     'VideoTimelineEmotionCount'
 ]

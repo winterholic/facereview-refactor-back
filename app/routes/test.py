@@ -4,7 +4,7 @@ import sentry_sdk
 
 from app.schemas.common_schema import SuccessResponseSchema
 from common.decorator.auth_decorators import public_route
-from common.scheduler.jobs import YoutubeTrendingJob, VideoDistributionHistoryJob
+from common.scheduler.jobs import YoutubeTrendingJob
 from common.utils.logging_utils import get_logger
 
 logger = get_logger('test_routes')
@@ -35,30 +35,6 @@ def test_youtube_trending_job():
         }
     except Exception as e:
         logger.error(f"YouTube 인기 동영상 수집 테스트 실패: {str(e)}", exc_info=True)
-        return {
-            "result": "error",
-            "message": f"작업 실행 중 오류 발생: {str(e)}"
-        }, 500
-
-
-@test_blueprint.route('/scheduler/video-distribution-history', methods=['POST'])
-@public_route
-@test_blueprint.response(200, SuccessResponseSchema)
-def test_video_distribution_history_job():
-    try:
-        logger.info("Video Distribution History 생성 테스트 시작")
-
-        job = VideoDistributionHistoryJob()
-        job.execute()
-
-        logger.info("Video Distribution History 생성 테스트 완료")
-
-        return {
-            "result": "success",
-            "message": "Video Distribution History 생성 작업이 성공적으로 실행되었습니다. 로그를 확인하세요."
-        }
-    except Exception as e:
-        logger.error(f"Video Distribution History 생성 테스트 실패: {str(e)}", exc_info=True)
         return {
             "result": "error",
             "message": f"작업 실행 중 오류 발생: {str(e)}"

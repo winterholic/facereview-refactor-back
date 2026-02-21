@@ -30,29 +30,27 @@ from app.models.video_request import VideoRequest
 from app.models.comment import Comment
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
 
+from app.models.user_emotion_dna import UserEmotionDna
+
 from app.dto.mypage import (
     RecentVideoDto,
     RecentVideoListDto,
     EmotionSummaryDto,
-    CategoryEmotionDto,
-    CategoryEmotionItemDto,
-    CategoryEmotionListDto,
-    EmotionTrendDto,
-    EmotionTrendPointDto,
     HighlightDto,
     EmotionVideoDto,
     CategoryEmotionHighlightDto,
     VideoTimelineDto,
-    TimelineEmotionPointDto, PasswordResetDto
+    TimelineEmotionPointDto,
+    PasswordResetDto,
+    CalendarDayDto,
+    EmotionCalendarDto,
+    MomentDto,
+    DnaTraitDto,
 )
 
 
 def _extract_emotion_scores(scores) -> Dict[str, float]:
-    """
-    emotion_score_timeline의 값을 안전하게 파싱합니다.
-    list 형태 [neutral, happy, surprise, sad, angry] 또는
-    dict 형태 {'neutral': 0.5, 'happy': 0.3, ...} 모두 지원합니다.
-    """
+    """emotion_score_timeline 값을 list/dict 양쪽 형태 모두 파싱"""
     emotion_order = ['neutral', 'happy', 'surprise', 'sad', 'angry']
     result = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
 
@@ -338,148 +336,6 @@ class MypageService:
 
     @staticmethod
     @transactional_readonly
-    def get_category_emotions(user_id: str) -> Dict:
-        user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
-        if not user:
-            raise BusinessError(APIError.USER_NOT_FOUND)
-
-        repo = YoutubeWatchingDataRepository(mongo_db)
-        collection = repo.collection
-
-        watching_data_docs = collection.find({'user_id': user_id})
-
-        category_emotions = {}
-
-        for doc in watching_data_docs:
-            video_id = doc['video_id']
-
-            video = Video.query.filter_by(video_id=video_id, is_deleted=0).first()
-            if not video:
-                continue
-
-            category = video.category.value if hasattr(video.category, 'value') else video.category
-            if category not in category_emotions:
-                category_emotions[category] = {
-                    'neutral': 0,
-                    'happy': 0,
-                    'surprise': 0,
-                    'sad': 0,
-                    'angry': 0
-                }
-
-            emotion_score_timeline = doc.get('emotion_score_timeline', {})
-            for ms_key, scores in emotion_score_timeline.items():
-                parsed_scores = _extract_emotion_scores(scores)
-                category_emotions[category]['neutral'] += parsed_scores['neutral']
-                category_emotions[category]['happy'] += parsed_scores['happy']
-                category_emotions[category]['surprise'] += parsed_scores['surprise']
-                category_emotions[category]['sad'] += parsed_scores['sad']
-                category_emotions[category]['angry'] += parsed_scores['angry']
-
-        categories = []
-        for category, emotions in category_emotions.items():
-            total = sum(emotions.values())
-
-            emotion_percentages = []
-            for emotion, score in emotions.items():
-                if total > 0:
-                    percentage = round((score / total) * 100, 1)
-                else:
-                    percentage = 0.0
-                emotion_percentages.append((emotion, percentage))
-
-            emotion_percentages.sort(key=lambda x: x[1], reverse=True)
-            top_2 = emotion_percentages[:2]
-
-            top_emotions = [
-                CategoryEmotionItemDto(emotion=emotion, percentage=percentage)
-                for emotion, percentage in top_2
-            ]
-
-            category_dto = CategoryEmotionDto(
-                category=category,
-                top_emotions=top_emotions
-            )
-            categories.append(category_dto)
-
-        result = CategoryEmotionListDto(categories=categories)
-        return result.to_dict()
-
-    @staticmethod
-    @transactional_readonly
-    def get_emotion_trend(user_id: str, period: str) -> Dict:
-        user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
-        if not user:
-            raise BusinessError(APIError.USER_NOT_FOUND)
-
-        repo = YoutubeWatchingDataRepository(mongo_db)
-        collection = repo.collection
-
-        watching_data_docs = collection.find({'user_id': user_id})
-
-        period_emotions = {}
-
-        for doc in watching_data_docs:
-            created_at = doc['created_at']
-
-            if period == 'weekly':
-                label = f"{created_at.year}-W{created_at.isocalendar()[1]:02d}"
-            elif period == 'monthly':
-                label = f"{created_at.year}-{created_at.month:02d}"
-            elif period == 'yearly':
-                label = str(created_at.year)
-            else:
-                raise BusinessError(APIError.INVALID_INPUT_VALUE, "period는 'weekly', 'monthly', 'yearly' 중 하나여야 합니다.")
-
-            if label not in period_emotions:
-                period_emotions[label] = {
-                    'neutral': 0,
-                    'happy': 0,
-                    'surprise': 0,
-                    'sad': 0,
-                    'angry': 0
-                }
-
-            emotion_score_timeline = doc.get('emotion_score_timeline', {})
-            for ms_key, scores in emotion_score_timeline.items():
-                parsed_scores = _extract_emotion_scores(scores)
-                period_emotions[label]['neutral'] += parsed_scores['neutral']
-                period_emotions[label]['happy'] += parsed_scores['happy']
-                period_emotions[label]['surprise'] += parsed_scores['surprise']
-                period_emotions[label]['sad'] += parsed_scores['sad']
-                period_emotions[label]['angry'] += parsed_scores['angry']
-
-        data_points = []
-        for label in sorted(period_emotions.keys()):
-            emotions = period_emotions[label]
-            total = sum(emotions.values())
-
-            if total > 0:
-                point = EmotionTrendPointDto(
-                    label=label,
-                    neutral=round((emotions['neutral'] / total) * 100, 1),
-                    happy=round((emotions['happy'] / total) * 100, 1),
-                    surprise=round((emotions['surprise'] / total) * 100, 1),
-                    sad=round((emotions['sad'] / total) * 100, 1),
-                    angry=round((emotions['angry'] / total) * 100, 1)
-                )
-            else:
-                point = EmotionTrendPointDto(
-                    label=label,
-                    neutral=0.0,
-                    happy=0.0,
-                    surprise=0.0,
-                    sad=0.0,
-                    angry=0.0
-                )
-
-            data_points.append(point)
-
-        result = EmotionTrendDto(period=period, data=data_points)
-        return result.to_dict()
-
-    @staticmethod
-    @transactional_readonly
     def get_highlight(user_id: str) -> Dict:
         user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
         if not user:
@@ -599,6 +455,244 @@ class MypageService:
         return result.to_dict()
 
     @staticmethod
+    @transactional_readonly
+    def get_emotion_calendar(user_id: str, year: int, month: Optional[int]) -> Dict:
+        user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
+        if not user:
+            raise BusinessError(APIError.USER_NOT_FOUND)
+
+        repo = YoutubeWatchingDataRepository(mongo_db)
+        start_date = datetime(year, month or 1, 1)
+        if month:
+            end_date = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+        else:
+            end_date = datetime(year + 1, 1, 1)
+
+        docs = list(repo.collection.find({
+            'user_id': user_id,
+            'created_at': {'$gte': start_date, '$lt': end_date}
+        }))
+
+        daily_map: Dict[str, list] = {}
+        for doc in docs:
+            date_str = doc['created_at'].strftime('%Y-%m-%d')
+            dominant = doc.get('dominant_emotion', 'neutral')
+            ep = doc.get('emotion_percentages', {})
+            intensity_val = float(ep.get(dominant, 0.0))
+            timeline_len = len(doc.get('emotion_score_timeline', {}))
+            watch_secs = timeline_len // 2  # 2 frames/sec → seconds
+
+            if date_str not in daily_map:
+                daily_map[date_str] = []
+            daily_map[date_str].append({
+                'dominant': dominant,
+                'intensity': intensity_val,
+                'watch_secs': watch_secs,
+            })
+
+        result_data = []
+        for date_str in sorted(daily_map.keys()):
+            sessions = daily_map[date_str]
+            emotion_counts: Dict[str, int] = {}
+            total_intensity = 0.0
+            total_secs = 0
+
+            for s in sessions:
+                emotion_counts[s['dominant']] = emotion_counts.get(s['dominant'], 0) + 1
+                total_intensity += s['intensity']
+                total_secs += s['watch_secs']
+
+            day_dominant = max(emotion_counts, key=emotion_counts.get)
+            avg_intensity = round(min(total_intensity / len(sessions), 1.0), 3)
+
+            result_data.append(CalendarDayDto(
+                date=date_str,
+                dominant_emotion=day_dominant,
+                intensity=avg_intensity,
+                watch_count=len(sessions),
+                total_watch_time=total_secs,
+            ))
+
+        return EmotionCalendarDto(year=year, month=month, data=result_data).to_dict()
+
+    @staticmethod
+    @transactional_readonly
+    def get_moments(user_id: str, emotion: str = 'all', page: int = 1, size: int = 10) -> Dict:
+        user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
+        if not user:
+            raise BusinessError(APIError.USER_NOT_FOUND)
+
+        repo = YoutubeWatchingDataRepository(mongo_db)
+        docs = list(repo.collection.find({'user_id': user_id}).sort('created_at', -1).limit(200))
+
+        #NOTE: 배치로 Video 정보 조회 (N+1 방지)
+        video_ids = list({doc['video_id'] for doc in docs})
+        video_map = {v.video_id: v for v in Video.query.filter(Video.video_id.in_(video_ids)).all()}
+
+        all_moments = []
+        PEAK_THRESHOLD = 80.0
+        WINDOW_FRAMES = 60  # 30초 구간 (2 frames/sec * 30sec)
+
+        for doc in docs:
+            video = video_map.get(doc['video_id'])
+            if not video:
+                continue
+
+            timeline = doc.get('emotion_score_timeline', {})
+            watched_at = doc['created_at'].isoformat()
+
+            try:
+                sorted_keys = sorted(timeline.keys(), key=lambda k: int(k))
+            except (ValueError, TypeError):
+                continue
+
+            #NOTE: 30초 구간별 피크 프레임 1개 추출
+            window_best = None
+            window_start = 0
+
+            for i, key in enumerate(sorted_keys):
+                scores = _extract_emotion_scores(timeline[key])
+                peak_emotion = max(scores, key=scores.get)
+                peak_score = scores[peak_emotion]
+
+                if i - window_start >= WINDOW_FRAMES:
+                    if window_best and window_best['score'] >= PEAK_THRESHOLD:
+                        all_moments.append(window_best['moment'])
+                    window_start = i
+                    window_best = None
+
+                if peak_score >= PEAK_THRESHOLD:
+                    if window_best is None or peak_score > window_best['score']:
+                        window_best = {
+                            'score': peak_score,
+                            'moment': MomentDto(
+                                video_id=video.video_id,
+                                video_title=video.title,
+                                youtube_url=f"https://www.youtube.com/watch?v={video.youtube_url}",
+                                timestamp_seconds=round(int(key) / 100.0, 1),
+                                emotion=peak_emotion,
+                                emotion_percentage=round(peak_score, 2),
+                                thumbnail_url=f"https://img.youtube.com/vi/{video.youtube_url}/hqdefault.jpg",
+                                watched_at=watched_at,
+                            )
+                        }
+
+            #NOTE: 마지막 구간 처리
+            if window_best and window_best['score'] >= PEAK_THRESHOLD:
+                all_moments.append(window_best['moment'])
+
+        if emotion != 'all':
+            all_moments = [m for m in all_moments if m.emotion == emotion]
+
+        all_moments.sort(key=lambda m: m.emotion_percentage, reverse=True)
+
+        total = len(all_moments)
+        start = (page - 1) * size
+        paged = all_moments[start:start + size]
+
+        return {
+            'moments': [m.to_dict() for m in paged],
+            'total': total,
+            'has_next': (start + size) < total,
+        }
+
+    @staticmethod
+    @transactional
+    def get_emotion_dna(user_id: str) -> Dict:
+        user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
+        if not user:
+            raise BusinessError(APIError.USER_NOT_FOUND)
+
+        repo = YoutubeWatchingDataRepository(mongo_db)
+        total_sessions = repo.collection.count_documents({'user_id': user_id})
+
+        #NOTE: 캐시 확인 (만료 전 + 시청 증가 5 미만이면 캐시 반환)
+        cached = UserEmotionDna.query.filter_by(user_id=user_id).first()
+        if cached:
+            if (cached.expires_at > datetime.utcnow()
+                    and total_sessions - cached.based_on_videos < 5):
+                return cached.dna_data
+
+        docs = list(repo.collection.find({'user_id': user_id}))
+
+        if not docs:
+            return _build_default_dna(user_id)
+
+        #NOTE: 감정 통계 집계
+        ep_sums = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
+        total_completion = 0.0
+        night_count = 0
+        video_ids_set = set()
+
+        for doc in docs:
+            ep = doc.get('emotion_percentages', {})
+            for e in ep_sums:
+                ep_sums[e] += float(ep.get(e, 0.0))
+            total_completion += float(doc.get('completion_rate', 0.0))
+            hour = doc['created_at'].hour
+            if hour >= 22 or hour <= 3:
+                night_count += 1
+            video_ids_set.add(doc['video_id'])
+
+        n = len(docs)
+        happy_pct = ep_sums['happy'] / n
+        sad_pct = ep_sums['sad'] / n
+        surprise_pct = ep_sums['surprise'] / n
+        neutral_pct = ep_sums['neutral'] / n
+        angry_pct = ep_sums['angry'] / n
+        avg_completion = total_completion / n
+        night_ratio = night_count / n
+
+        videos = Video.query.filter(Video.video_id.in_(list(video_ids_set))).all()
+        num_genres = len({(v.category.value if hasattr(v.category, 'value') else v.category) for v in videos})
+
+        dna_type = _determine_dna_type(
+            avg_completion, night_ratio, happy_pct, sad_pct,
+            surprise_pct, neutral_pct, num_genres, n
+        )
+        dna_info = _DNA_TYPES[dna_type]
+        traits = _compute_traits(dna_type, happy_pct, sad_pct, surprise_pct, neutral_pct,
+                                 avg_completion, num_genres, night_ratio)
+        fun_facts = _compute_fun_facts(happy_pct, avg_completion, n)
+
+        generated_at = datetime.utcnow()
+        result = {
+            'dna_type': dna_type,
+            'dna_title': dna_info['title'],
+            'dna_description': dna_info['description'],
+            'traits': traits,
+            'emotion_radar': {
+                'happy': int(happy_pct * 100),
+                'surprise': int(surprise_pct * 100),
+                'neutral': int(neutral_pct * 100),
+                'sad': int(sad_pct * 100),
+                'angry': int(angry_pct * 100),
+            },
+            'fun_facts': fun_facts,
+            'generated_at': generated_at.isoformat(),
+            'based_on_videos': n,
+        }
+
+        expires_at = generated_at + timedelta(days=7)
+        if cached:
+            cached.dna_type = dna_type
+            cached.dna_data = result
+            cached.based_on_videos = n
+            cached.generated_at = generated_at
+            cached.expires_at = expires_at
+        else:
+            db.session.add(UserEmotionDna(
+                user_id=user_id,
+                dna_type=dna_type,
+                dna_data=result,
+                based_on_videos=n,
+                generated_at=generated_at,
+                expires_at=expires_at,
+            ))
+
+        return result
+
+    @staticmethod
     @transactional
     def withdraw_user(user_id: str, refresh_token: str = None):
         user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
@@ -622,3 +716,138 @@ class MypageService:
         Comment.query.filter_by(user_id=user_id).update({'is_deleted': 1})
 
         user.is_deleted = 1
+
+
+# ── 감정 DNA 헬퍼 ──────────────────────────────────────────────────────────────
+
+_DNA_TYPES = {
+    'JOYFUL_EXPLORER': {
+        'title': '유쾌한 탐험가',
+        'description': '새로운 장르를 두려워하지 않고, 어디서든 웃음을 찾아내는 당신!',
+    },
+    'EMOTIONAL_DIVER': {
+        'title': '감성 다이버',
+        'description': '기쁨과 슬픔을 깊게 느끼며 콘텐츠에 완전히 몰입하는 당신!',
+    },
+    'THRILL_SEEKER': {
+        'title': '스릴 추구자',
+        'description': '예상치 못한 순간에 짜릿함을 느끼는 당신!',
+    },
+    'CALM_OBSERVER': {
+        'title': '차분한 관찰자',
+        'description': '감정에 흔들리지 않고 냉철하게 콘텐츠를 분석하는 당신!',
+    },
+    'MOOD_SURFER': {
+        'title': '무드 서퍼',
+        'description': '감정의 파도를 자유롭게 타며 시청하는 당신!',
+    },
+    'COMFORT_LOVER': {
+        'title': '안정 추구자',
+        'description': '익숙한 장르에서 편안함을 찾는 당신!',
+    },
+    'NIGHT_OWL': {
+        'title': '밤의 시청자',
+        'description': '고요한 밤에 콘텐츠를 즐기는 당신!',
+    },
+    'BINGE_MASTER': {
+        'title': '정주행 마스터',
+        'description': '한번 시작하면 끝까지 보는 완주의 달인!',
+    },
+}
+
+_TRAIT_POOL = {
+    'happy_score':     '웃음 포인트',
+    'explorer_score':  '장르 탐험가',
+    'immersion_score': '몰입형 시청자',
+    'thrill_score':    '짜릿함 추구자',
+    'calm_score':      '차분한 관찰자',
+    'night_score':     '야행성 시청자',
+    'depth_score':     '감정 깊이',
+}
+
+_DNA_TRAIT_KEYS = {
+    'JOYFUL_EXPLORER': ['happy_score', 'explorer_score', 'immersion_score'],
+    'EMOTIONAL_DIVER': ['depth_score', 'immersion_score', 'happy_score'],
+    'THRILL_SEEKER':   ['thrill_score', 'immersion_score', 'explorer_score'],
+    'CALM_OBSERVER':   ['calm_score', 'immersion_score', 'explorer_score'],
+    'MOOD_SURFER':     ['depth_score', 'explorer_score', 'happy_score'],
+    'COMFORT_LOVER':   ['immersion_score', 'calm_score', 'happy_score'],
+    'NIGHT_OWL':       ['night_score', 'immersion_score', 'happy_score'],
+    'BINGE_MASTER':    ['immersion_score', 'happy_score', 'explorer_score'],
+}
+
+
+def _determine_dna_type(avg_completion, night_ratio, happy_pct, sad_pct,
+                         surprise_pct, neutral_pct, num_genres, total_sessions) -> str:
+    if avg_completion >= 0.85:
+        return 'BINGE_MASTER'
+    if night_ratio >= 0.40:
+        return 'NIGHT_OWL'
+    if surprise_pct >= 0.30:
+        return 'THRILL_SEEKER'
+    if neutral_pct >= 0.40:
+        return 'CALM_OBSERVER'
+    if (happy_pct + sad_pct) >= 0.50 and avg_completion >= 0.70:
+        return 'EMOTIONAL_DIVER'
+    if happy_pct >= 0.35:
+        return 'JOYFUL_EXPLORER'
+    if num_genres <= 2 and total_sessions >= 3:
+        return 'COMFORT_LOVER'
+    #NOTE: 어떤 감정도 30% 이상 지배적이지 않으면 MOOD_SURFER
+    if max(happy_pct, sad_pct, surprise_pct, neutral_pct) < 0.30:
+        return 'MOOD_SURFER'
+    return 'JOYFUL_EXPLORER'
+
+
+def _compute_traits(dna_type, happy_pct, sad_pct, surprise_pct, neutral_pct,
+                    avg_completion, num_genres, night_ratio) -> list:
+    scores = {
+        'happy_score':     int(happy_pct * 100),
+        'explorer_score':  int(min(num_genres / 16 * 100, 100)),
+        'immersion_score': int(avg_completion * 100),
+        'thrill_score':    int(surprise_pct * 100),
+        'calm_score':      int(neutral_pct * 100),
+        'night_score':     int(night_ratio * 100),
+        'depth_score':     int((happy_pct + sad_pct) / 2 * 100),
+    }
+    keys = _DNA_TRAIT_KEYS.get(dna_type, ['happy_score', 'explorer_score', 'immersion_score'])
+    return [{'trait': _TRAIT_POOL[k], 'score': scores[k]} for k in keys]
+
+
+def _compute_fun_facts(happy_pct, avg_completion, total_sessions) -> list:
+    AVG_HAPPY = 0.30
+    AVG_COMPLETION = 0.60
+    facts = []
+
+    happy_diff = int(abs(happy_pct - AVG_HAPPY) / AVG_HAPPY * 100)
+    if happy_pct >= AVG_HAPPY:
+        facts.append(f"당신은 평균보다 {happy_diff}% 더 자주 웃어요")
+    else:
+        facts.append(f"당신은 평균보다 {happy_diff}% 덜 웃는 편이에요")
+
+    completion_diff = int(abs(avg_completion - AVG_COMPLETION) / AVG_COMPLETION * 100)
+    if avg_completion >= AVG_COMPLETION:
+        facts.append(f"영상 완주율이 평균보다 {completion_diff}% 높아요")
+    else:
+        facts.append(f"총 {total_sessions}편의 영상을 시청했어요")
+
+    return facts
+
+
+def _build_default_dna(user_id: str) -> dict:
+    #NOTE: 시청 데이터가 전혀 없는 유저의 기본 응답
+    info = _DNA_TYPES['JOYFUL_EXPLORER']
+    return {
+        'dna_type': 'JOYFUL_EXPLORER',
+        'dna_title': info['title'],
+        'dna_description': info['description'],
+        'traits': [
+            {'trait': '웃음 포인트', 'score': 0},
+            {'trait': '장르 탐험가', 'score': 0},
+            {'trait': '몰입형 시청자', 'score': 0},
+        ],
+        'emotion_radar': {'happy': 0, 'surprise': 0, 'neutral': 0, 'sad': 0, 'angry': 0},
+        'fun_facts': ['아직 시청 데이터가 없어요. 영상을 더 시청해보세요!'],
+        'generated_at': datetime.utcnow().isoformat(),
+        'based_on_videos': 0,
+    }

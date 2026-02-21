@@ -3,21 +3,16 @@ from flask_smorest import Blueprint
 
 from app.schemas.admin import (
     GetUsersRequestSchema, GetUsersResponseSchema,
-    GetUserDetailResponseSchema,
     DeactivateUserResponseSchema,
     ChangeUserRoleRequestSchema, ChangeUserRoleResponseSchema,
     GetVideoRequestsRequestSchema, GetVideoRequestsResponseSchema,
-    GetVideoRequestDetailResponseSchema,
     ApproveVideoRequestRequestSchema, ApproveVideoRequestResponseSchema,
     RejectVideoRequestRequestSchema, RejectVideoRequestResponseSchema,
     GetVideosRequestSchema, GetVideosResponseSchema,
-    GetVideoStatisticsResponseSchema,
     DeleteVideoResponseSchema,
     GetCommentsRequestSchema, GetCommentsResponseSchema,
     DeleteCommentResponseSchema,
-    DashboardOverviewResponseSchema,
-    PopularVideosResponseSchema,
-    RecentActivitiesResponseSchema,
+    SystemStatusResponseSchema,
     GenerateDummyDataResponseSchema
 )
 from app.services.admin_service import AdminService
@@ -55,19 +50,11 @@ def admin_required(func):
 @admin_blueprint.response(200, GetUsersResponseSchema)
 @admin_blueprint.doc(security=[{"BearerAuth": []}])
 def get_users(args):
-    search = args.get('search')
+    keyword = args.get('keyword')
+    is_deleted = args.get('is_deleted')
     page = args.get('page', 1)
     size = args.get('size', 20)
-    return AdminService.get_users(search, page, size)
-
-
-@admin_blueprint.route('/users/<user_id>', methods=['GET'])
-@login_required
-@admin_required
-@admin_blueprint.response(200, GetUserDetailResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
-def get_user_detail(user_id):
-    return AdminService.get_user_detail(user_id)
+    return AdminService.get_users(keyword, page, size, is_deleted)
 
 
 @admin_blueprint.route('/users/<user_id>/deactivate', methods=['PATCH'])
@@ -103,15 +90,6 @@ def get_video_requests(args):
     return AdminService.get_video_requests(status, page, size)
 
 
-@admin_blueprint.route('/video-requests/<request_id>', methods=['GET'])
-@login_required
-@admin_required
-@admin_blueprint.response(200, GetVideoRequestDetailResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
-def get_video_request_detail(request_id):
-    return AdminService.get_video_request_detail(request_id)
-
-
 @admin_blueprint.route('/video-requests/<request_id>/approve', methods=['POST'])
 @login_required
 @admin_required
@@ -143,20 +121,11 @@ def reject_video_request(data, request_id):
 @admin_blueprint.response(200, GetVideosResponseSchema)
 @admin_blueprint.doc(security=[{"BearerAuth": []}])
 def get_videos(args):
-    search = args.get('search')
+    keyword = args.get('keyword')
     category = args.get('category')
     page = args.get('page', 1)
     size = args.get('size', 20)
-    return AdminService.get_videos(search, category, page, size)
-
-
-@admin_blueprint.route('/videos/<video_id>/statistics', methods=['GET'])
-@login_required
-@admin_required
-@admin_blueprint.response(200, GetVideoStatisticsResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
-def get_video_statistics(video_id):
-    return AdminService.get_video_statistics(video_id)
+    return AdminService.get_videos(keyword, category, page, size)
 
 
 @admin_blueprint.route('/videos/<video_id>', methods=['DELETE'])
@@ -176,10 +145,11 @@ def delete_video(video_id):
 @admin_blueprint.doc(security=[{"BearerAuth": []}])
 def get_comments(args):
     video_id = args.get('video_id')
-    user_id = args.get('user_id')
+    keyword = args.get('keyword')
+    is_deleted = args.get('is_deleted')
     page = args.get('page', 1)
     size = args.get('size', 20)
-    return AdminService.get_comments(video_id, user_id, page, size)
+    return AdminService.get_comments(video_id, keyword, is_deleted, page, size)
 
 
 @admin_blueprint.route('/comments/<comment_id>', methods=['DELETE'])
@@ -191,31 +161,13 @@ def delete_comment(comment_id):
     return AdminService.delete_comment(comment_id)
 
 
-@admin_blueprint.route('/dashboard/overview', methods=['GET'])
+@admin_blueprint.route('/system/status', methods=['GET'])
 @login_required
 @admin_required
-@admin_blueprint.response(200, DashboardOverviewResponseSchema)
+@admin_blueprint.response(200, SystemStatusResponseSchema)
 @admin_blueprint.doc(security=[{"BearerAuth": []}])
-def get_dashboard_overview():
-    return AdminService.get_dashboard_overview()
-
-
-@admin_blueprint.route('/dashboard/popular-videos', methods=['GET'])
-@login_required
-@admin_required
-@admin_blueprint.response(200, PopularVideosResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
-def get_popular_videos():
-    return AdminService.get_popular_videos()
-
-
-@admin_blueprint.route('/dashboard/recent-activities', methods=['GET'])
-@login_required
-@admin_required
-@admin_blueprint.response(200, RecentActivitiesResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
-def get_recent_activities():
-    return AdminService.get_recent_activities()
+def get_system_status():
+    return AdminService.get_system_status()
 
 
 @admin_blueprint.route('/dummy-data', methods=['POST'])

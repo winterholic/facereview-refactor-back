@@ -3,9 +3,7 @@
 """
 
 from .youtube_trending_job import YoutubeTrendingJob
-from .video_distribution_history_job import VideoDistributionHistoryJob
 
 __all__ = [
     'YoutubeTrendingJob',
-    'VideoDistributionHistoryJob'
 ]

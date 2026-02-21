@@ -3,7 +3,8 @@ Face Review Application
 Flask 기반 얼굴 인식 웹 애플리케이션
 """
 
-from flask import Flask
+import time
+from flask import Flask, g
 from flask_cors import CORS
 from pymongo import MongoClient
 from sqlalchemy.engine import URL
@@ -211,6 +212,31 @@ def create_app(config_name='default'):
 
     from common.exception.error_handler import register_error_handlers
     register_error_handlers(app)
+
+    @app.before_request
+    def _before_request():
+        g.start_time = time.time()
+
+    @app.after_request
+    def _after_request(response):
+        from common.extensions import redis_client as _redis
+        if _redis:
+            try:
+                elapsed_ms = (time.time() - g.start_time) * 1000
+                pipe = _redis.pipeline()
+                pipe.incr('facereview:metrics:requests:1h')
+                pipe.expire('facereview:metrics:requests:1h', 3600)
+                pipe.lpush('facereview:metrics:response_times', elapsed_ms)
+                pipe.ltrim('facereview:metrics:response_times', 0, 999)
+                pipe.expire('facereview:metrics:response_times', 3600)
+                if response.status_code >= 400:
+                    pipe.incr('facereview:metrics:errors:1h')
+                    pipe.expire('facereview:metrics:errors:1h', 3600)
+                pipe.execute()
+            except Exception:
+                pass
+        return response
+
     @app.route('/health')
     def health_check():
         return {

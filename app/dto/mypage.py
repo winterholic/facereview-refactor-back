@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 @dataclass
@@ -10,39 +10,33 @@ class PasswordResetDto:
 
 @dataclass
 class TimelineEmotionPointDto:
-    x: int  # 시간 인덱스
-    y: float  # 감정 비율 (0.0 ~ 100.0)
+    x: int
+    y: float
 
     def to_dict(self):
-        return {
-            'x': self.x,
-            'y': self.y
-        }
+        return {'x': self.x, 'y': self.y}
 
 
 @dataclass
 class VideoTimelineDto:
-    id: str  # 감정 이름
+    id: str
     data: List[TimelineEmotionPointDto]
 
     def to_dict(self):
-        return {
-            'id': self.id,
-            'data': [p.to_dict() for p in self.data]
-        }
+        return {'id': self.id, 'data': [p.to_dict() for p in self.data]}
 
 
-# ==================== 최근 본 영상 ====================
+# ==================== 1.1 최근 시청 ====================
 
 @dataclass
 class RecentVideoDto:
     video_id: str
     youtube_url: str
     title: str
-    dominant_emotion: str  # 가장 많이 느낀 감정
-    dominant_emotion_per: float  # 비율 (0.0 ~ 100.0)
-    watched_at: str  # ISO format
-    timeline_data: List[VideoTimelineDto]  # 타임라인 감정 데이터
+    dominant_emotion: str
+    dominant_emotion_per: float
+    watched_at: str
+    timeline_data: List[VideoTimelineDto]
 
     def to_dict(self):
         return {
@@ -74,10 +68,12 @@ class RecentVideoListDto:
         }
 
 
+# ==================== 1.2 감정 요약 ====================
+
 @dataclass
 class EmotionSummaryDto:
-    emotion_percentages: Dict[str, float]  # 각 감정 비율 (0.0 ~ 100.0)
-    emotion_seconds: Dict[str, int]  # 각 감정을 느낀 총 초
+    emotion_percentages: Dict[str, float]
+    emotion_seconds: Dict[str, int]
 
     def to_dict(self):
         return {
@@ -86,72 +82,7 @@ class EmotionSummaryDto:
         }
 
 
-
-@dataclass
-class CategoryEmotionItemDto:
-    emotion: str
-    percentage: float  # 0.0 ~ 100.0
-
-    def to_dict(self):
-        return {
-            'emotion': self.emotion,
-            'percentage': self.percentage
-        }
-
-
-@dataclass
-class CategoryEmotionDto:
-    category: str
-    top_emotions: List[CategoryEmotionItemDto]  # 상위 2개
-
-    def to_dict(self):
-        return {
-            'category': self.category,
-            'top_emotions': [e.to_dict() for e in self.top_emotions]
-        }
-
-
-@dataclass
-class CategoryEmotionListDto:
-    categories: List[CategoryEmotionDto]
-
-    def to_dict(self):
-        return {
-            'categories': [c.to_dict() for c in self.categories]
-        }
-
-
-@dataclass
-class EmotionTrendPointDto:
-    label: str  # 주차/월/연도 레이블
-    neutral: float
-    happy: float
-    surprise: float
-    sad: float
-    angry: float
-
-    def to_dict(self):
-        return {
-            'label': self.label,
-            'neutral': self.neutral,
-            'happy': self.happy,
-            'surprise': self.surprise,
-            'sad': self.sad,
-            'angry': self.angry
-        }
-
-
-@dataclass
-class EmotionTrendDto:
-    period: str  # 'weekly', 'monthly', 'yearly'
-    data: List[EmotionTrendPointDto]
-
-    def to_dict(self):
-        return {
-            'period': self.period,
-            'data': [d.to_dict() for d in self.data]
-        }
-
+# ==================== 1.3 하이라이트 ====================
 
 @dataclass
 class EmotionVideoDto:
@@ -159,7 +90,7 @@ class EmotionVideoDto:
     video_id: str
     youtube_url: str
     title: str
-    emotion_percentage: float  # 해당 감정 비율 (0.0 ~ 100.0)
+    emotion_percentage: float
 
     def to_dict(self):
         return {
@@ -175,7 +106,7 @@ class EmotionVideoDto:
 class CategoryEmotionHighlightDto:
     category: str
     dominant_emotion: str
-    percentage: float  # 0.0 ~ 100.0
+    percentage: float
 
     def to_dict(self):
         return {
@@ -187,10 +118,10 @@ class CategoryEmotionHighlightDto:
 
 @dataclass
 class HighlightDto:
-    emotion_videos: List[EmotionVideoDto]  # 각 감정별 가장 많이 느낀 영상
-    category_emotions: List[CategoryEmotionHighlightDto]  # 각 카테고리별 가장 많이 느낀 감정
-    most_watched_category: str  # 가장 많이 시청한 카테고리
-    most_felt_emotion: str  # 가장 많이 느낀 감정
+    emotion_videos: List[EmotionVideoDto]
+    category_emotions: List[CategoryEmotionHighlightDto]
+    most_watched_category: str
+    most_felt_emotion: str
 
     def to_dict(self):
         return {
@@ -199,3 +130,74 @@ class HighlightDto:
             'most_watched_category': self.most_watched_category,
             'most_felt_emotion': self.most_felt_emotion
         }
+
+
+# ==================== 2.1 감정 캘린더 ====================
+
+@dataclass
+class CalendarDayDto:
+    date: str
+    dominant_emotion: str
+    intensity: float
+    watch_count: int
+    total_watch_time: int
+
+    def to_dict(self):
+        return {
+            'date': self.date,
+            'dominant_emotion': self.dominant_emotion,
+            'intensity': self.intensity,
+            'watch_count': self.watch_count,
+            'total_watch_time': self.total_watch_time
+        }
+
+
+@dataclass
+class EmotionCalendarDto:
+    year: int
+    month: Optional[int]
+    data: List[CalendarDayDto]
+
+    def to_dict(self):
+        return {
+            'year': self.year,
+            'month': self.month,
+            'data': [d.to_dict() for d in self.data]
+        }
+
+
+# ==================== 2.2 베스트 모먼트 ====================
+
+@dataclass
+class MomentDto:
+    video_id: str
+    video_title: str
+    youtube_url: str
+    timestamp_seconds: float
+    emotion: str
+    emotion_percentage: float
+    thumbnail_url: str
+    watched_at: str
+
+    def to_dict(self):
+        return {
+            'video_id': self.video_id,
+            'video_title': self.video_title,
+            'youtube_url': self.youtube_url,
+            'timestamp_seconds': self.timestamp_seconds,
+            'emotion': self.emotion,
+            'emotion_percentage': self.emotion_percentage,
+            'thumbnail_url': self.thumbnail_url,
+            'watched_at': self.watched_at
+        }
+
+
+# ==================== 2.3 감정 DNA ====================
+
+@dataclass
+class DnaTraitDto:
+    trait: str
+    score: int
+
+    def to_dict(self):
+        return {'trait': self.trait, 'score': self.score}

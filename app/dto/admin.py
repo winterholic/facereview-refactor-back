@@ -33,8 +33,8 @@ class AdminUserDto:
     is_verify_email_done: bool
     is_deleted: bool
     created_at: str
-    total_watch_count: int  # 총 시청 횟수
-    total_comment_count: int  # 총 댓글 수
+    total_watch_count: int
+    total_comment_count: int
 
     def to_dict(self):
         return {
@@ -67,42 +67,6 @@ class AdminUserListDto:
             'page': self.page,
             'size': self.size,
             'has_next': self.has_next
-        }
-
-
-@dataclass
-class AdminUserDetailDto:
-    user_id: str
-    email: str
-    name: str
-    role: str
-    profile_image_id: int
-    is_tutorial_done: bool
-    is_verify_email_done: bool
-    is_deleted: bool
-    created_at: str
-    favorite_genres: List[str]
-    total_watch_count: int
-    total_comment_count: int
-    total_like_count: int
-    recent_activity: str  # 최근 활동 일시
-
-    def to_dict(self):
-        return {
-            'user_id': self.user_id,
-            'email': self.email,
-            'name': self.name,
-            'role': self.role,
-            'profile_image_id': self.profile_image_id,
-            'is_tutorial_done': self.is_tutorial_done,
-            'is_verify_email_done': self.is_verify_email_done,
-            'is_deleted': self.is_deleted,
-            'created_at': self.created_at,
-            'favorite_genres': self.favorite_genres,
-            'total_watch_count': self.total_watch_count,
-            'total_comment_count': self.total_comment_count,
-            'total_like_count': self.total_like_count,
-            'recent_activity': self.recent_activity
         }
 
 
@@ -150,7 +114,6 @@ class VideoRequestListDto:
             'size': self.size,
             'has_next': self.has_next
         }
-
 
 
 @dataclass
@@ -202,33 +165,6 @@ class AdminVideoListDto:
 
 
 @dataclass
-class VideoStatisticsDto:
-    video_id: str
-    youtube_url: str
-    title: str
-    view_count: int
-    unique_viewer_count: int  # 고유 시청자 수
-    like_count: int
-    comment_count: int
-    average_completion_rate: float  # 평균 시청 완료율
-    dominant_emotion: str
-    emotion_distribution: dict  # 감정 분포
-
-    def to_dict(self):
-        return {
-            'video_id': self.video_id,
-            'youtube_url': self.youtube_url,
-            'title': self.title,
-            'view_count': self.view_count,
-            'unique_viewer_count': self.unique_viewer_count,
-            'like_count': self.like_count,
-            'comment_count': self.comment_count,
-            'average_completion_rate': self.average_completion_rate,
-            'dominant_emotion': self.dominant_emotion,
-            'emotion_distribution': self.emotion_distribution
-        }
-
-@dataclass
 class AdminCommentDto:
     comment_id: str
     video_id: str
@@ -269,85 +205,4 @@ class AdminCommentListDto:
             'page': self.page,
             'size': self.size,
             'has_next': self.has_next
-        }
-
-@dataclass
-class DashboardOverviewDto:
-    total_users: int
-    active_users: int  # 지난 30일 활동 유저
-    total_videos: int
-    total_views: int
-    total_comments: int
-    pending_requests: int  # 대기중인 영상 요청
-    today_new_users: int
-    today_new_views: int
-
-    def to_dict(self):
-        return {
-            'total_users': self.total_users,
-            'active_users': self.active_users,
-            'total_videos': self.total_videos,
-            'total_views': self.total_views,
-            'total_comments': self.total_comments,
-            'pending_requests': self.pending_requests,
-            'today_new_users': self.today_new_users,
-            'today_new_views': self.today_new_views
-        }
-
-
-@dataclass
-class PopularVideoDto:
-    rank: int
-    video_id: str
-    youtube_url: str
-    title: str
-    view_count: int
-    like_count: int
-    dominant_emotion: str
-
-    def to_dict(self):
-        return {
-            'rank': self.rank,
-            'video_id': self.video_id,
-            'youtube_url': self.youtube_url,
-            'title': self.title,
-            'view_count': self.view_count,
-            'like_count': self.like_count,
-            'dominant_emotion': self.dominant_emotion
-        }
-
-
-@dataclass
-class PopularVideoListDto:
-    videos: List[PopularVideoDto]
-
-    def to_dict(self):
-        return {
-            'videos': [v.to_dict() for v in self.videos]
-        }
-
-
-@dataclass
-class RecentActivityDto:
-    activity_type: str  # 'signup', 'view', 'comment', 'like', 'request'
-    user_name: str
-    description: str
-    created_at: str
-
-    def to_dict(self):
-        return {
-            'activity_type': self.activity_type,
-            'user_name': self.user_name,
-            'description': self.description,
-            'created_at': self.created_at
-        }
-
-
-@dataclass
-class RecentActivityListDto:
-    activities: List[RecentActivityDto]
-
-    def to_dict(self):
-        return {
-            'activities': [a.to_dict() for a in self.activities]
         }
