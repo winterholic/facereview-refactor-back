@@ -13,7 +13,7 @@ from app.models.comment import Comment
 from app.models.video_like import VideoLike
 from app.models.user import User
 from app.models.mongodb.video_distribution import VideoDistributionRepository
-from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
+from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
 from app.dto.watch import (
     VideoDetailDto, TimelineDataDto, TimelinePointDto,
     RecommendedVideoDto, RecommendedVideoListDto,
@@ -65,40 +65,54 @@ class WatchService:
 
     @staticmethod
     def _get_compressed_timeline_data(video_id: str, duration: int) -> TimelineDataDto:
-        timeline_repo = VideoTimelineEmotionCountRepository(mongo_db)
+        watching_repo = YoutubeWatchingDataRepository(mongo_db)
 
-        timeline_count = timeline_repo.find_by_video_id(video_id)
+        #NOTE: 해당 영상의 모든 시청 세션에서 emotion_score_timeline만 projection해서 가져옴
+        docs = list(watching_repo.collection.find(
+            {'video_id': video_id},
+            {'emotion_score_timeline': 1, '_id': 0}
+        ))
 
-        if not timeline_count or not timeline_count.counts:
+        if not docs:
             return WatchService._get_default_timeline_data()
 
-        emotion_lists = {
-            'happy': [],
-            'neutral': [],
-            'surprise': [],
-            'sad': [],
-            'angry': []
-        }
+        #NOTE: 타임라인 키별로 감정 점수 합산 및 카운트 (centisecond 키: "0", "50", "100", ...)
+        #NOTE: emotion_score_timeline 값: [neutral, happy, surprise, sad, angry] (0~100 스케일)
+        emotion_sums = {}
+        counts_per_key = {}
 
-        #NOTE: counts에 실제로 존재하는 키만 순서대로 처리 (프레임 전송 간격에 무관)
-        sorted_keys = sorted(timeline_count.counts.keys(), key=lambda k: int(k))
+        for doc in docs:
+            timeline = doc.get('emotion_score_timeline', {})
+            for time_key, scores in timeline.items():
+                if not isinstance(scores, (list, tuple)) or len(scores) < 5:
+                    continue
+                if time_key not in emotion_sums:
+                    emotion_sums[time_key] = [0.0, 0.0, 0.0, 0.0, 0.0]
+                    counts_per_key[time_key] = 0
+                for i in range(5):
+                    emotion_sums[time_key][i] += float(scores[i])
+                counts_per_key[time_key] += 1
+
+        if not counts_per_key:
+            return WatchService._get_default_timeline_data()
+
+        emotion_order = ['neutral', 'happy', 'surprise', 'sad', 'angry']
+        emotion_lists = {'neutral': [], 'happy': [], 'surprise': [], 'sad': [], 'angry': []}
+
+        sorted_keys = sorted(counts_per_key.keys(), key=lambda k: float(k))
 
         for time_key in sorted_keys:
-            time_seconds = int(time_key) / 100.0
-            percentages = timeline_count.get_emotion_percentages_at_time(time_seconds)
-            if percentages:
-                for emotion in ['happy', 'neutral', 'surprise', 'sad', 'angry']:
-                    emotion_lists[emotion].append(percentages[emotion] * 100)
+            count = counts_per_key[time_key]
+            sums = emotion_sums[time_key]
+            for i, emotion in enumerate(emotion_order):
+                emotion_lists[emotion].append(round(sums[i] / count, 2))
 
-        data_count = len(emotion_lists['neutral'])
-        if data_count == 0:
-            return WatchService._get_default_timeline_data()
+        data_count = len(sorted_keys)
 
         #NOTE: 100개 이상이면 압축 (최대한 100개 정도의 데이터 포인트로 압축)
         if data_count > 100:
             compressed_lists = {}
-            max_points = 100
-            parameter = max(1, round(data_count / max_points))
+            parameter = max(1, round(data_count / 100))
 
             for emotion, values in emotion_lists.items():
                 compressed = []
@@ -111,20 +125,17 @@ class WatchService:
                     temp_count += 1
 
                     if temp_count == parameter or idx == len(values) - 1:
-                        temp_avg = round(temp_sum / temp_count, 1)
-                        compressed.append(TimelinePointDto(x=temp_index, y=temp_avg))
+                        compressed.append(TimelinePointDto(x=temp_index, y=round(temp_sum / temp_count, 1)))
                         temp_sum = 0
                         temp_count = 0
                         temp_index += 1
 
                 compressed_lists[emotion] = compressed
         else:
-            compressed_lists = {}
-            for emotion, values in emotion_lists.items():
-                compressed_lists[emotion] = [
-                    TimelinePointDto(x=idx + 1, y=round(val, 1))
-                    for idx, val in enumerate(values)
-                ]
+            compressed_lists = {
+                emotion: [TimelinePointDto(x=idx + 1, y=val) for idx, val in enumerate(values)]
+                for emotion, values in emotion_lists.items()
+            }
 
         return TimelineDataDto(
             happy=compressed_lists['happy'],
