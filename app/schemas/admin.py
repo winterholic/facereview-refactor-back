@@ -258,6 +258,14 @@ class SystemStatusResponseSchema(Schema):
     checked_at = fields.String(metadata={'description': '조회 시각 (ISO 8601)'})
 
 
+class GenerateDummyDataRequestSchema(Schema):
+    count = fields.Integer(
+        load_default=30,
+        validate=validate.Range(min=10, max=300),
+        metadata={'description': '생성할 시청 기록 수 (10~300, 기본값 30)'}
+    )
+
+
 class GenerateDummyDataResponseSchema(Schema):
     message = fields.String(metadata={'description': '처리 결과 메시지'})
     created_count = fields.Integer(metadata={'description': '생성된 시청 기록 수'})

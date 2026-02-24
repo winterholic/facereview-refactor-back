@@ -428,12 +428,12 @@ class AdminService:
         }
 
     @staticmethod
-    def generate_dummy_data(user_id: str) -> dict:
+    def generate_dummy_data(user_id: str, count: int = 30) -> dict:
         all_videos = Video.query.filter(Video.is_deleted == 0, Video.duration > 0).all()
         if not all_videos:
             raise BusinessError(APIError.VIDEO_NOT_FOUND, "더미 데이터를 생성할 영상이 없습니다.")
 
-        videos = random.sample(all_videos, min(30, len(all_videos)))
+        videos = random.sample(all_videos, min(count, len(all_videos)))
 
         watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
         video_dist_repo = VideoDistributionRepository(mongo_db)

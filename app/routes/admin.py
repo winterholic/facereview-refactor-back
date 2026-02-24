@@ -14,6 +14,7 @@ from app.schemas.admin import (
     GetCommentsRequestSchema, GetCommentsResponseSchema,
     DeleteCommentResponseSchema,
     SystemStatusResponseSchema,
+    GenerateDummyDataRequestSchema,
     GenerateDummyDataResponseSchema
 )
 from app.services.admin_service import AdminService
@@ -174,7 +175,9 @@ def get_system_status():
 @admin_blueprint.route('/dummy-data', methods=['POST'])
 @login_required
 @admin_required
+@admin_blueprint.arguments(GenerateDummyDataRequestSchema, location='query')
 @admin_blueprint.response(200, GenerateDummyDataResponseSchema)
 @admin_blueprint.doc(security=[{"BearerAuth": []}])
-def generate_dummy_data():
-    return AdminService.generate_dummy_data(g.user_id)
+def generate_dummy_data(args):
+    count = args.get('count', 30)
+    return AdminService.generate_dummy_data(g.user_id, count)
