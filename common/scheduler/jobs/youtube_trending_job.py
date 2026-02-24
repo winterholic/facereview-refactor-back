@@ -137,8 +137,7 @@ class YoutubeTrendingJob:
         if mapped_category == GenreEnum.ETC:
             mapped_category = self._classify_category_by_keywords(title, tags, description)
         elif mapped_category == GenreEnum.BEAUTY:
-            # YouTube category 26 "Howto & Style"은 BEAUTY가 기본이나
-            # 요리 관련 키워드가 있으면 COOK으로 보정
+            #NOTE: YouTube category 26(Howto & Style)은 요리 콘텐츠도 포함 → 키워드 매칭으로 COOK 보정
             _COOK_HINTS = {'요리', '레시피', '쿠킹', 'cooking', 'recipe', '집밥', '음식만들기', 'cook'}
             text = (title + ' ' + ' '.join(tags) + ' ' + description[:300]).lower()
             if any(hint in text for hint in _COOK_HINTS):

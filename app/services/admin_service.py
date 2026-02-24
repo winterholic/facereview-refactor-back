@@ -20,6 +20,7 @@ from app.models.video_like import VideoLike
 from app.models.video_view_log import VideoViewLog
 from app.models.mongodb.video_distribution import VideoDistributionRepository, VideoDistribution, EmotionAverages, RecommendationScores
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages
+from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 
 from app.dto.admin import (
     MessageResponseDto, ApproveVideoResponseDto,
@@ -437,6 +438,7 @@ class AdminService:
 
         watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
         video_dist_repo = VideoDistributionRepository(mongo_db)
+        timeline_repo = VideoTimelineEmotionCountRepository(mongo_db)
 
         created_video_ids = []
 
@@ -491,6 +493,24 @@ class AdminService:
                 #NOTE: youtube_watching_data 삽입 후 video_distribution 재계산
                 from app.services.watching_data_service import WatchingDataService
                 WatchingDataService._update_video_distribution(video_dist_repo, watching_data_repo, video.video_id)
+
+                #NOTE: video_timeline_emotion_count 업데이트 (get_video_detail 타임라인에서 사용)
+                inc_dict = {}
+                for frame in frames:
+                    field = f"counts.{frame['time_key']}.{frame['dominant']}"
+                    inc_dict[field] = inc_dict.get(field, 0) + 1
+                timeline_repo.collection.update_one(
+                    {'video_id': video.video_id},
+                    {
+                        '$inc': inc_dict,
+                        '$setOnInsert': {
+                            'video_id': video.video_id,
+                            'emotion_labels': ['neutral', 'happy', 'surprise', 'sad', 'angry'],
+                            'created_at': datetime.utcnow()
+                        }
+                    },
+                    upsert=True
+                )
 
                 created_video_ids.append(video.video_id)
 

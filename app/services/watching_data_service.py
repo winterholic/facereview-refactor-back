@@ -14,7 +14,7 @@ class WatchingDataService:
     @staticmethod
     def save_watching_data(video_view_log_id: str, duration: int = None, client_info_dict: Dict = None, cached_data: Dict = None):
         if not cached_data:
-            logger.info(f"No cached data for {video_view_log_id}")
+            logger.info(f"캐시 데이터 없음: {video_view_log_id}")
             return
 
         user_id = cached_data['user_id']
@@ -23,7 +23,7 @@ class WatchingDataService:
         video_duration = duration or cached_data.get('duration')
 
         if not frames:
-            logger.info(f"No frame data for {video_view_log_id}")
+            logger.info(f"프레임 데이터 없음: {video_view_log_id}")
             return
 
         mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
@@ -51,7 +51,7 @@ class WatchingDataService:
         most_emotion_timeline = {}
         emotion_score_timeline = {}
         for frame in frames:
-            # NOTE: upsert_frame과 동일하게 centisecond 단위로 변환 (20.29초 → "2029")
+            #NOTE: upsert_frame과 동일하게 centisecond 단위로 변환 (20.29초 → "2029")
             time_key = str(int(float(frame['youtube_running_time']) * 100))
             most_emotion_timeline[time_key] = frame['most_emotion']
 
@@ -78,7 +78,7 @@ class WatchingDataService:
         )
 
         watching_data_repo.insert(watching_data)
-        logger.info(f"Saved watching data: {video_view_log_id}")
+        logger.info(f"시청 데이터 저장 완료: {video_view_log_id}")
 
         #NOTE: video_distribution 평균/추천점수 업데이트 (기존 로직 유지)
         #NOTE: watch_frame에서 emotion_counts는 실시간 증가, 여기서는 평균 계산
@@ -141,7 +141,6 @@ class WatchingDataService:
             #NOTE: duration이 없으면 기존 로직 사용 (1000개 기준)
             return min(1.0, len(frames) / 1000.0)
 
-        #NOTE: 시청 완료율 계산: (실제 프레임 개수 / 최대 프레임 개수)
         #NOTE: 0.1초(100ms) 단위로 프레임 전송 → 최대 프레임 개수 = duration * 10
         max_frame_count = duration * 10
         actual_frame_count = len(frames)
@@ -168,9 +167,9 @@ class WatchingDataService:
                     emotion=most_emotion
                 )
 
-            logger.info(f"Updated timeline emotion count for video {video_id}")
+            logger.info(f"타임라인 감정 카운트 업데이트 완료: {video_id}")
         except Exception as e:
-            logger.error(f"Error updating timeline emotion count: {e}")
+            logger.error(f"타임라인 감정 카운트 업데이트 오류: {e}")
 
     @staticmethod
     def _update_video_distribution(
@@ -239,7 +238,7 @@ class WatchingDataService:
             )
 
             video_dist_repo.upsert(video_distribution)
-            logger.info(f"Updated video distribution for video {video_id}")
+            logger.info(f"영상 분포 업데이트 완료: {video_id}")
 
         except Exception as e:
-            logger.error(f"Error updating video distribution: {e}")
+            logger.error(f"영상 분포 업데이트 오류: {e}")

@@ -11,9 +11,6 @@ from common.utils.logging_utils import get_logger
 logger = get_logger('youtube_category_fill_job')
 
 
-# ── 카테고리별 검색 키워드 ──────────────────────────────────────────────────────
-# 기존 trending job(mostPopular 차트)으로 잘 안잡히는 카테고리 위주로 키워드 작성.
-# 리스트 순서가 우선순위(부족분이 많을수록 앞 키워드부터 더 많이 사용).
 CATEGORY_SEARCH_QUERIES: Dict[GenreEnum, List[str]] = {
     GenreEnum.EATING:      ['먹방 한국', '맛집 리뷰', 'mukbang asmr'],
     GenreEnum.DRAMA:       ['한국드라마 명장면', 'kdrama 클립', '드라마 하이라이트'],
@@ -33,15 +30,8 @@ CATEGORY_SEARCH_QUERIES: Dict[GenreEnum, List[str]] = {
     GenreEnum.ETC:         ['한국 유튜브 인기 영상', '화제 영상 한국'],
 }
 
-# 카테고리별 목표 최소 영상 수 (이 미만이면 보충 대상)
 TARGET_MIN_COUNT = 20
-
-# 한 번 실행당 허용할 최대 search.list 호출 수
-# search.list = 100 quota/call → 12회 = 1,200 quota
-# 기존 trending job ~4 quota/day 합산해도 일일 10,000 quota의 15% 이하
-MAX_SEARCH_CALLS = 12
-
-# search.list 1회당 가져올 결과 수 (최대 50, 너무 많으면 관련도 떨어짐)
+MAX_SEARCH_CALLS = 12  #NOTE: search.list = 100 quota/call → 최대 1,200 quota/run
 SEARCH_MAX_RESULTS = 20
 
 
@@ -51,10 +41,7 @@ class YoutubeCategoryFillJob:
         self.api_key: str = None
         self.quota_used: int = 0
 
-    # ── 내부 유틸 ───────────────────────────────────────────────────────────────
-
     def _check_category_counts(self) -> Dict[GenreEnum, int]:
-        """DB에서 카테고리별 활성 영상 수 조회"""
         from app.models.video import Video
 
         rows = (
@@ -66,10 +53,6 @@ class YoutubeCategoryFillJob:
         return {row.category: row.cnt for row in rows}
 
     def _priority_targets(self, counts: Dict[GenreEnum, int]) -> List[Tuple[GenreEnum, int]]:
-        """
-        보충 대상 카테고리를 부족분 많은 순으로 반환.
-        모든 카테고리가 기준치 이상이면 가장 적은 카테고리 TOP 5만 보충.
-        """
         targets = [
             (genre, counts.get(genre, 0))
             for genre in CATEGORY_SEARCH_QUERIES
@@ -77,7 +60,7 @@ class YoutubeCategoryFillJob:
         ]
 
         if not targets:
-            # 기준치를 모두 넘었어도 신규 영상 추가를 위해 최하위 5개 보충
+            #NOTE: 모두 기준치 이상이어도 신규 영상 확보를 위해 최하위 5개 보충
             all_sorted = sorted(
                 [(g, counts.get(g, 0)) for g in CATEGORY_SEARCH_QUERIES],
                 key=lambda x: x[1]
@@ -90,10 +73,6 @@ class YoutubeCategoryFillJob:
         return targets
 
     def _search_video_ids(self, query: str) -> List[str]:
-        """
-        YouTube search.list API 호출 (100 quota 소모).
-        영상 ID 목록 반환. 403 발생 시 이후 모든 호출 스킵.
-        """
         try:
             resp = requests.get(
                 'https://www.googleapis.com/youtube/v3/search',
@@ -123,7 +102,7 @@ class YoutubeCategoryFillJob:
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 403:
                 logger.error("YouTube API quota 초과(403). 이번 실행 중단.")
-                # 강제 종료 플래그: quota 한도를 크게 초과시켜 이후 루프에서 break
+                #NOTE: quota_used를 한도 초과값으로 설정 → 이후 루프에서 자동 break
                 self.quota_used = MAX_SEARCH_CALLS * 100 + 1
             else:
                 logger.error(f"YouTube search API 오류 ({query}): {e}")
@@ -133,7 +112,6 @@ class YoutubeCategoryFillJob:
             return []
 
     def _fetch_video_details(self, video_ids: List[str]) -> List[Dict]:
-        """videos.list API로 영상 상세 정보 조회 (1 quota/call)"""
         if not video_ids:
             return []
 
@@ -177,7 +155,6 @@ class YoutubeCategoryFillJob:
         return results
 
     def _save_videos(self, video_list: List[Dict], target_category: GenreEnum) -> int:
-        """중복 제외 후 MySQL·MongoDB에 영상 저장. 저장된 개수 반환."""
         from app.models.video import Video
         from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
         from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
@@ -222,8 +199,6 @@ class YoutubeCategoryFillJob:
 
         return saved
 
-    # ── 메인 실행 ───────────────────────────────────────────────────────────────
-
     def execute(self):
         try:
             self.api_key = current_app.config.get('YOUTUBE_API_KEY')
@@ -234,14 +209,12 @@ class YoutubeCategoryFillJob:
             self.quota_used = 0
             logger.info("카테고리 보충 수집 시작...")
 
-            # 1. 카테고리별 현재 영상 수 조회
             counts = self._check_category_counts()
             logger.info(
                 "카테고리별 현재 영상 수: " +
                 ', '.join(f"{k.value}={v}" for k, v in sorted(counts.items(), key=lambda x: x[1]))
             )
 
-            # 2. 보충 대상 카테고리 결정 (부족분 많은 순)
             targets = self._priority_targets(counts)
             logger.info(f"보충 대상 카테고리: {[(g.value, cnt) for g, cnt in targets]}")
 
@@ -259,7 +232,6 @@ class YoutubeCategoryFillJob:
                 queries = CATEGORY_SEARCH_QUERIES.get(genre, [])
                 shortage = TARGET_MIN_COUNT - current_count
 
-                # 부족분 크기에 따라 쿼리 수 조정
                 if shortage > 10:
                     num_queries = min(3, len(queries))
                 elif shortage > 5:

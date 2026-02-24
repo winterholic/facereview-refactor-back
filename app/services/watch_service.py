@@ -69,12 +69,8 @@ class WatchService:
 
         timeline_count = timeline_repo.find_by_video_id(video_id)
 
-        if not timeline_count:
+        if not timeline_count or not timeline_count.counts:
             return WatchService._get_default_timeline_data()
-
-        #NOTE: 유튜브 러닝타임 리스트 생성 (0.1초 간격, 센티초 (1/100초) 단위)
-        duration_ms = duration * 1000
-        youtube_running_times = list(range(0, duration_ms, 100))
 
         emotion_lists = {
             'happy': [],
@@ -84,20 +80,21 @@ class WatchService:
             'angry': []
         }
 
-        for running_time in youtube_running_times:
-            # NOTE: running_time은 밀리초(ms), get_emotion_percentages_at_time은 초(s) 단위를 받음
-            running_time_seconds = running_time / 1000.0
-            percentages = timeline_count.get_emotion_percentages_at_time(running_time_seconds)
+        #NOTE: counts에 실제로 존재하는 키만 순서대로 처리 (프레임 전송 간격에 무관)
+        sorted_keys = sorted(timeline_count.counts.keys(), key=lambda k: int(k))
 
+        for time_key in sorted_keys:
+            time_seconds = int(time_key) / 100.0
+            percentages = timeline_count.get_emotion_percentages_at_time(time_seconds)
             if percentages:
                 for emotion in ['happy', 'neutral', 'surprise', 'sad', 'angry']:
                     emotion_lists[emotion].append(percentages[emotion] * 100)
-            else:
-                for emotion in ['happy', 'neutral', 'surprise', 'sad', 'angry']:
-                    emotion_lists[emotion].append(0.0)
+
+        data_count = len(emotion_lists['neutral'])
+        if data_count == 0:
+            return WatchService._get_default_timeline_data()
 
         #NOTE: 100개 이상이면 압축 (최대한 100개 정도의 데이터 포인트로 압축)
-        data_count = len(youtube_running_times)
         if data_count > 100:
             compressed_lists = {}
             max_points = 100

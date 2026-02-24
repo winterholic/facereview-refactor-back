@@ -229,7 +229,7 @@ class MypageService:
             'angry': []
         }
 
-        # NOTE: 키가 숫자로 변환 가능한 것만 필터링 (centisecond 정수 "2029" 및 초 소수점 "20.29" 모두 허용)
+        #NOTE: 키가 숫자로 변환 가능한 것만 필터링 (centisecond 정수 "2029" 및 초 소수점 "20.29" 모두 허용)
         valid_keys = []
         for key in emotion_score_timeline.keys():
             try:
