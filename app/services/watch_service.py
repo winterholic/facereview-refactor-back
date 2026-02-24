@@ -72,7 +72,7 @@ class WatchService:
         if not timeline_count:
             return WatchService._get_default_timeline_data()
 
-        #NOTE: 유튜브 러닝타임 리스트 생성 (0.1초 간격, ms 단위)
+        #NOTE: 유튜브 러닝타임 리스트 생성 (0.1초 간격, 센티초 (1/100초) 단위)
         duration_ms = duration * 1000
         youtube_running_times = list(range(0, duration_ms, 100))
 

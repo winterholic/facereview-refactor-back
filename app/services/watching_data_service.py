@@ -51,7 +51,8 @@ class WatchingDataService:
         most_emotion_timeline = {}
         emotion_score_timeline = {}
         for frame in frames:
-            time_key = str(frame['youtube_running_time'])
+            # NOTE: upsert_frame과 동일하게 centisecond 단위로 변환 (20.29초 → "2029")
+            time_key = str(int(float(frame['youtube_running_time']) * 100))
             most_emotion_timeline[time_key] = frame['most_emotion']
 
             emotion_percentages_dict = frame['emotion_percentages']

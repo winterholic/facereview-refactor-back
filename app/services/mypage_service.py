@@ -229,16 +229,16 @@ class MypageService:
             'angry': []
         }
 
-        # NOTE: 키가 정수로 변환 가능한 것만 필터링
+        # NOTE: 키가 숫자로 변환 가능한 것만 필터링 (centisecond 정수 "2029" 및 초 소수점 "20.29" 모두 허용)
         valid_keys = []
         for key in emotion_score_timeline.keys():
             try:
-                int(key)
+                float(key)
                 valid_keys.append(key)
             except (ValueError, TypeError):
                 continue
 
-        sorted_keys = sorted(valid_keys, key=lambda x: int(x))
+        sorted_keys = sorted(valid_keys, key=lambda x: float(x))
 
         for idx, ms_key in enumerate(sorted_keys):
             scores = _extract_emotion_scores(emotion_score_timeline[ms_key])
