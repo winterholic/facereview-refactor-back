@@ -1,10 +1,11 @@
 """
 스케줄 작업 정의 및 등록
 - YouTube API를 사용한 인기 동영상 수집
+- 카테고리 편중 보정을 위한 보충 수집
 """
 
 from common.extensions import scheduler
-from common.scheduler.jobs import YoutubeTrendingJob
+from common.scheduler.jobs import YoutubeTrendingJob, YoutubeCategoryFillJob
 from common.utils.logging_utils import get_logger
 
 logger = get_logger('scheduler_tasks')
@@ -14,7 +15,7 @@ def register_scheduled_tasks():
     """
     모든 스케줄 작업을 등록하는 함수
     """
-    # 매일 새벽 6시에 YouTube 인기 동영상 수집
+    # 매일 새벽 6시: YouTube 인기 동영상 수집 (mostPopular 차트)
     scheduler.add_job(
         id='fetch_youtube_trending_videos',
         func=execute_youtube_trending_job,
@@ -24,8 +25,21 @@ def register_scheduled_tasks():
         replace_existing=True
     )
 
+    # 매주 화·금 새벽 3시: 카테고리 부족분 보충 수집 (search.list 기반)
+    # quota: 최대 1,200 units/run × 2회/주 ≈ 343 units/day (일일 10,000 quota 대비 여유)
+    scheduler.add_job(
+        id='fill_youtube_category_videos',
+        func=execute_youtube_category_fill_job,
+        trigger='cron',
+        day_of_week='tue,fri',
+        hour=3,
+        minute=0,
+        replace_existing=True
+    )
+
     logger.info("모든 스케줄 작업이 등록되었습니다.")
     logger.info("YouTube 인기 동영상 수집: 매일 06:00")
+    logger.info("YouTube 카테고리 보충 수집: 매주 화·금 03:00")
 
 
 def execute_youtube_trending_job():
@@ -38,3 +52,15 @@ def execute_youtube_trending_job():
             logger.info("YouTube 인기 동영상 수집 작업 완료")
         except Exception as e:
             logger.error(f"YouTube 인기 동영상 수집 작업 실패: {str(e)}", exc_info=True)
+
+
+def execute_youtube_category_fill_job():
+    """YouTube 카테고리 보충 수집 Job 실행 (Flask 앱 컨텍스트 내에서)"""
+    with scheduler.app.app_context():
+        try:
+            logger.info("YouTube 카테고리 보충 수집 작업 시작")
+            job = YoutubeCategoryFillJob()
+            job.execute()
+            logger.info("YouTube 카테고리 보충 수집 작업 완료")
+        except Exception as e:
+            logger.error(f"YouTube 카테고리 보충 수집 작업 실패: {str(e)}", exc_info=True)
