@@ -1,3 +1,4 @@
+from functools import wraps
 from flask import g
 from flask_smorest import Blueprint
 
@@ -29,6 +30,7 @@ admin_blueprint = Blueprint(
 
 
 def admin_required(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         from app.models.user import User
         from common.extensions import db
@@ -39,7 +41,6 @@ def admin_required(func):
 
         return func(*args, **kwargs)
 
-    wrapper.__name__ = func.__name__
     return wrapper
 
 
