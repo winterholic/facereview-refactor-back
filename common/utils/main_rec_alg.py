@@ -23,7 +23,7 @@ CATEGORY_WEIGHTS = {
     'etc': {'neutral': 2.5, 'happy': 2.0, 'surprise': 2.0, 'sad': 1.5, 'angry': 1.5}
 }
 
-SCORE_WEIGHTS = {'personalization': 0.40, 'quality': 0.25, 'freshness': 0.15, 'diversity': 0.20}
+SCORE_WEIGHTS = {'personalization': 0.55, 'quality': 0.20, 'freshness': 0.10, 'diversity': 0.15}
 
 
 def cosine_similarity(vec1: Dict[str, float], vec2: Dict[str, float]) -> float:
@@ -48,28 +48,75 @@ def calculate_emotion_preference(watching_data: List[Dict]) -> Dict[str, float]:
     return {k: v / total for k, v in emotion_sum.items()} if total else {k: 0.2 for k in emotion_sum}
 
 
+def calculate_category_emotion_preference(recent_data: List[Dict]) -> Dict[str, Dict[str, float]]:
+    """카테고리별 감정 선호도 계산: {category: {emotion: avg_pct}}"""
+    cat_emo_sum: Dict[str, Dict[str, float]] = {}
+    cat_count: Dict[str, int] = {}
+    for d in recent_data:
+        cat = d.get('category')
+        if not cat:
+            continue
+        if cat not in cat_emo_sum:
+            cat_emo_sum[cat] = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
+            cat_count[cat] = 0
+        for emo, pct in d.get('emotion_percentages', {}).items():
+            if emo in cat_emo_sum[cat]:
+                cat_emo_sum[cat][emo] += pct
+        cat_count[cat] += 1
+    result = {}
+    for cat, emo_sum in cat_emo_sum.items():
+        n = cat_count[cat]
+        result[cat] = {e: v / n for e, v in emo_sum.items()}
+    return result
+
+
 def calculate_personalization_score(video: Dict, favorite_genres: List[str],
                                     emotion_pref: Dict, recent_data: List[Dict]) -> float:
     score = 0.0
-    if video.get('category') in favorite_genres:
-        idx = favorite_genres.index(video['category'])
-        score += [20, 12, 6][min(idx, 2)]
+
+    # 선호 카테고리 가산점 (강화)
+    video_cat = video.get('category')
+    if video_cat in favorite_genres:
+        idx = favorite_genres.index(video_cat)
+        score += [40, 25, 15][min(idx, 2)]
+
+    video_emo = video.get('emotion_distribution', {})
+
+    # 카테고리별 감정 선호도: 같은 카테고리 영상을 볼 때 느낀 감정과 유사한 영상 부스트
+    if video_emo and recent_data:
+        cat_emo_pref = calculate_category_emotion_preference(recent_data)
+        if video_cat and video_cat in cat_emo_pref:
+            # 이 카테고리를 시청할 때의 감정 패턴과 영상 감정 분포 유사도
+            score += cosine_similarity(cat_emo_pref[video_cat], video_emo) * 35
+        else:
+            # 해당 카테고리 시청 기록 없으면 전체 감정 선호도 사용
+            score += cosine_similarity(emotion_pref, video_emo) * 20
+
+    # 최근 시청 감정 연속성 (시청 기록 있을 때만)
     if recent_data:
         weights = [2.0, 1.8, 1.6, 1.4, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7]
         for i, data in enumerate(recent_data[:10]):
             if i >= len(weights):
                 break
             score += (5 if data.get('dominant_emotion') == video.get('dominant_emotion') else 2) * weights[i]
-    video_emo = video.get('emotion_distribution', {})
-    if video_emo:
-        score += cosine_similarity(emotion_pref, video_emo) * 30
+
     return min(score, 100)
 
 
 def calculate_quality_score(video: Dict) -> float:
     score = 0.0
     completion = video.get('average_completion_rate', 0.0) * 100
-    score += [30, 25, 20, 15, 10, 0][min(int(completion // 10), 5)] if completion >= 50 else 0
+    # 완성도 50% 이상부터 구간별 가산점 (50~59%: 10, 60~69%: 15, 70~79%: 20, 80~89%: 25, 90%+: 30)
+    if completion >= 90:
+        score += 30
+    elif completion >= 80:
+        score += 25
+    elif completion >= 70:
+        score += 20
+    elif completion >= 60:
+        score += 15
+    elif completion >= 50:
+        score += 10
     views = video.get('view_count', 0)
     if views > 100:
         score += min(math.log10(views) * 8, 40)

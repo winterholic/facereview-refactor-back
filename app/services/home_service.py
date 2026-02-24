@@ -164,7 +164,8 @@ class HomeService:
                     'angry': video_distribution_document.emotion_averages.angry
                 }
 
-            if ((video_distribution_document.dominant_emotion is None)
+            if ((not video_distribution_document)
+                    or (video_distribution_document.dominant_emotion is None)
                     or (not emotion_dist)
                     or (sum(emotion_dist.values()) == 0)):
                 continue
@@ -195,6 +196,12 @@ class HomeService:
             for log in user_view_logs
         ]
 
+        # video_id → category 빠른 조회용 (카테고리별 감정 선호도 계산에 사용)
+        video_category_map = {
+            v.video_id: (v.category.value if hasattr(v.category, 'value') else v.category)
+            for v in all_videos
+        }
+
         recent_watching_data = []
         for wd in recent_watching_data_objs:
             if wd.dominant_emotion is None:
@@ -204,6 +211,7 @@ class HomeService:
 
             recent_watching_data.append({
                 'video_id': wd.video_id,
+                'category': video_category_map.get(wd.video_id),
                 'completion_rate': wd.completion_rate,
                 'dominant_emotion': wd.dominant_emotion,
                 'emotion_percentages': emotion_pct,
