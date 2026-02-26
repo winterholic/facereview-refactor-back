@@ -1,3 +1,4 @@
+import json
 import random
 from flask import current_app
 from common.decorator.db_decorators import transactional_readonly, transactional
@@ -11,11 +12,20 @@ from common.enum.youtube_genre import GenreEnum
 from common.exception.exceptions import BusinessError
 from common.extensions import db, mongo_client, mongo_db
 from common.utils.main_rec_alg import get_personalized_recommendations
-from common.utils.category_rec_alg import get_top_videos_by_category_emotion
+from common.utils.category_rec_alg import get_top_videos_by_category_emotion, CATEGORY_PREFERRED_EMOTION
 from app.dto.home import BaseVideoDataDto, CategoryVideoDataDto, CategoryVideoDataListDto, AllVideoDataDto
 from sqlalchemy import or_
 from bson.codec_options import CodecOptions
 from bson.binary import UuidRepresentation
+from common.utils.logging_utils import get_logger
+
+logger = get_logger('home_service')
+
+#NOTE: Redis 캐시 키 및 TTL 설정
+VIDEO_POOL_CACHE_KEY = 'facereview:video_pool_cache'
+CATEGORY_VIDEOS_CACHE_KEY = 'facereview:category_videos'
+VIDEO_POOL_CACHE_TTL = 1800     # 30분
+CATEGORY_VIDEOS_CACHE_TTL = 3600  # 1시간
 
 
 class HomeService:
@@ -125,52 +135,26 @@ class HomeService:
 
 
     @staticmethod
-    @transactional_readonly
-    def get_personalized_videos(user_id: str, limit: int = 20):
-        user = User.query.filter_by(user_id=user_id).first()
-        if not user:
-            raise BusinessError(APIError.USER_NOT_FOUND)
-
-        favorite_genres = [fg.genre.value for fg in user.favorite_genres.all()]
-
+    def _build_and_cache_video_pool() -> dict:
+        """전체 영상 풀을 DB에서 로드하여 Redis Hash에 캐싱. 반환: {video_id: video_data_dict}"""
+        from common.extensions import redis_client
         all_videos = Video.query.filter_by(is_deleted=0).all()
-
-        user_view_logs = VideoViewLog.query.filter_by(user_id=user_id).all()
-
-        viewed_video_ids = {log.video_id for log in user_view_logs}
-
-        recent_watching_data_objs = []
-        video_stats_dict = {}
-        watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
+        video_ids = [v.video_id for v in all_videos]
         video_dist_repo = VideoDistributionRepository(mongo_db)
-
-        recent_watching_data_objs = watching_data_repo.find_by_user_id(user_id, limit=20)
-
-        video_ids = [video.video_id for video in all_videos]
-
         video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
 
-        all_videos_dict = []
+        pool = {}
+        pipe = redis_client.pipeline() if redis_client else None
+
         for video in all_videos:
-            video_distribution_document = video_stats_dict.get(video.video_id)
-
-            emotion_dist = {}
-            if video_distribution_document:
-                emotion_dist = {
-                    'neutral': video_distribution_document.emotion_averages.neutral,
-                    'happy': video_distribution_document.emotion_averages.happy,
-                    'surprise': video_distribution_document.emotion_averages.surprise,
-                    'sad': video_distribution_document.emotion_averages.sad,
-                    'angry': video_distribution_document.emotion_averages.angry
-                }
-
-            if ((not video_distribution_document)
-                    or (video_distribution_document.dominant_emotion is None)
-                    or (not emotion_dist)
-                    or (sum(emotion_dist.values()) == 0)):
+            dist = video_stats_dict.get(video.video_id)
+            if not dist or not dist.dominant_emotion:
+                continue
+            emotion_dist = dist.emotion_averages.to_dict()
+            if sum(emotion_dist.values()) == 0:
                 continue
 
-            video_dict = {
+            entry = {
                 'video_id': video.video_id,
                 'youtube_url': video.youtube_url,
                 'title': video.title,
@@ -179,36 +163,221 @@ class HomeService:
                 'duration': video.duration,
                 'view_count': video.view_count,
                 'like_count': video.like_count,
-                'created_at': video.created_at,
+                'created_at': video.created_at.isoformat() if video.created_at else None,
                 'is_deleted': video.is_deleted,
                 'emotion_distribution': emotion_dist,
-                'dominant_emotion': video_distribution_document.dominant_emotion,
-                'average_completion_rate': video_distribution_document.average_completion_rate,
+                'dominant_emotion': dist.dominant_emotion,
+                'average_completion_rate': dist.average_completion_rate,
                 'watching_data_count': 0
             }
-            all_videos_dict.append(video_dict)
+            pool[video.video_id] = entry
+            if pipe:
+                pipe.hset(VIDEO_POOL_CACHE_KEY, video.video_id, json.dumps(entry))
+
+        if pipe and pool:
+            pipe.expire(VIDEO_POOL_CACHE_KEY, VIDEO_POOL_CACHE_TTL)
+            pipe.execute()
+            logger.info(f"video_pool_cache 빌드 완료: {len(pool)}개 영상 캐싱")
+
+        return pool
+
+    @staticmethod
+    def _get_video_pool_from_cache() -> dict | None:
+        """Redis Hash에서 전체 영상 풀 조회. 캐시 없으면 None 반환"""
+        from common.extensions import redis_client
+        if not redis_client:
+            return None
+        raw = redis_client.hgetall(VIDEO_POOL_CACHE_KEY)
+        if not raw:
+            return None
+        return {vid: json.loads(data) for vid, data in raw.items()}
+
+    @staticmethod
+    def _build_and_cache_category_videos() -> list:
+        """카테고리별 영상 계산 후 Redis Hash에 캐싱. 반환: List[CategoryVideoDataDto]"""
+        from common.extensions import redis_client
+        all_videos = Video.query.filter_by(is_deleted=0).all()
+        video_ids = [v.video_id for v in all_videos]
+        video_dist_repo = VideoDistributionRepository(mongo_db)
+        video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
+
+        #NOTE: 카테고리별 전체 영상 풀 (감정 데이터 없을 때 랜덤 폴백용)
+        raw_videos_by_category = {genre.value: [] for genre in GenreEnum}
+        for video in all_videos:
+            cat = video.category.value if hasattr(video.category, 'value') else video.category
+            if cat in raw_videos_by_category:
+                raw_videos_by_category[cat].append(video)
+
+        #NOTE: 감정 데이터가 있는 영상만 분류 (알고리즘 입력용)
+        emotion_videos_by_category = {genre.value: [] for genre in GenreEnum}
+        for video in all_videos:
+            dist = video_stats_dict.get(video.video_id)
+            if not dist or not dist.dominant_emotion:
+                continue
+            emotion_dist = dist.emotion_averages.to_dict()
+            if sum(emotion_dist.values()) == 0:
+                continue
+
+            video_dict = {
+                'video_id': video.video_id,
+                'youtube_url': video.youtube_url,
+                'title': video.title,
+                'channel_name': video.channel_name,
+                'category': video.category,
+                'duration': video.duration,
+                'view_count': video.view_count,
+                'like_count': video.like_count,
+                'created_at': video.created_at,
+                'emotion_distribution': emotion_dist,
+                'dominant_emotion': dist.dominant_emotion,
+                'average_completion_rate': dist.average_completion_rate
+            }
+            cat = video.category.value if hasattr(video.category, 'value') else video.category
+            if cat in emotion_videos_by_category:
+                emotion_videos_by_category[cat].append(video_dict)
+
+        top_videos_by_category = get_top_videos_by_category_emotion(
+            videos_by_category=emotion_videos_by_category,
+            limit=20
+        )
+
+        category_dtos = []
+        pipe = redis_client.pipeline() if redis_client else None
+
+        for category_name, videos in top_videos_by_category.items():
+            if videos:
+                cache_entries = []
+                video_dtos = []
+                for video in videos:
+                    emotion_dist = video.get('emotion_distribution', {})
+                    dominant_emotion = video.get('dominant_emotion', 'none')
+                    dominant_emotion_per = round(emotion_dist[dominant_emotion] * 100.0, 2) if (emotion_dist and dominant_emotion in emotion_dist) else 0.0
+
+                    #NOTE: 카테고리 선호 감정 비율 저장 (write-through 재정렬용)
+                    cat_val = video.get('category')
+                    cat_str = cat_val.value if hasattr(cat_val, 'value') else cat_val
+                    try:
+                        genre_enum = GenreEnum(cat_str)
+                        preferred_emotion_str = CATEGORY_PREFERRED_EMOTION.get(genre_enum, 'neutral')
+                    except (ValueError, KeyError):
+                        preferred_emotion_str = 'neutral'
+                    preferred_emotion_ratio = emotion_dist.get(preferred_emotion_str, 0.0)
+
+                    cache_entries.append({
+                        'video_id': video['video_id'],
+                        'youtube_url': video['youtube_url'],
+                        'title': video['title'],
+                        'dominant_emotion': dominant_emotion,
+                        'dominant_emotion_per': dominant_emotion_per,
+                        'emotion_distribution': emotion_dist,
+                        'preferred_emotion_ratio': preferred_emotion_ratio
+                    })
+                    video_dtos.append(BaseVideoDataDto(
+                        video_id=video['video_id'],
+                        youtube_url=video['youtube_url'],
+                        title=video['title'],
+                        dominant_emotion=dominant_emotion,
+                        dominant_emotion_per=dominant_emotion_per
+                    ))
+            else:
+                #NOTE: 감정 데이터 없는 카테고리 → 해당 카테고리 랜덤 영상으로 폴백
+                raw_candidates = raw_videos_by_category.get(category_name, [])
+                if not raw_candidates:
+                    continue
+                sampled = random.sample(raw_candidates, min(20, len(raw_candidates)))
+                cache_entries = [
+                    {
+                        'video_id': v.video_id,
+                        'youtube_url': v.youtube_url,
+                        'title': v.title,
+                        'dominant_emotion': None,
+                        'dominant_emotion_per': 0.0,
+                        'emotion_distribution': {},
+                        'preferred_emotion_ratio': 0.0
+                    }
+                    for v in sampled
+                ]
+                video_dtos = [
+                    BaseVideoDataDto(
+                        video_id=v.video_id,
+                        youtube_url=v.youtube_url,
+                        title=v.title,
+                        dominant_emotion=None,
+                        dominant_emotion_per=0.0
+                    )
+                    for v in sampled
+                ]
+
+            category_dtos.append(CategoryVideoDataDto(category_name=category_name, videos=video_dtos))
+            if pipe:
+                pipe.hset(CATEGORY_VIDEOS_CACHE_KEY, category_name, json.dumps(cache_entries))
+
+        if pipe and category_dtos:
+            pipe.expire(CATEGORY_VIDEOS_CACHE_KEY, CATEGORY_VIDEOS_CACHE_TTL)
+            pipe.execute()
+            logger.info(f"category_videos_cache 빌드 완료: {len(category_dtos)}개 카테고리 캐싱")
+
+        return category_dtos
+
+    @staticmethod
+    def _get_category_videos_from_cache() -> list | None:
+        """Redis Hash에서 카테고리별 영상 조회. 캐시 없으면 None 반환"""
+        from common.extensions import redis_client
+        if not redis_client:
+            return None
+        raw = redis_client.hgetall(CATEGORY_VIDEOS_CACHE_KEY)
+        if not raw:
+            return None
+        category_dtos = []
+        for cat_name, videos_json in raw.items():
+            videos = json.loads(videos_json)
+            video_dtos = [
+                BaseVideoDataDto(
+                    video_id=v['video_id'],
+                    youtube_url=v['youtube_url'],
+                    title=v['title'],
+                    dominant_emotion=v.get('dominant_emotion'),
+                    dominant_emotion_per=v.get('dominant_emotion_per', 0.0)
+                )
+                for v in videos
+            ]
+            category_dtos.append(CategoryVideoDataDto(category_name=cat_name, videos=video_dtos))
+        return category_dtos
+
+    @staticmethod
+    @transactional_readonly
+    def get_personalized_videos(user_id: str, limit: int = 20):
+        user = User.query.filter_by(user_id=user_id).first()
+        if not user:
+            raise BusinessError(APIError.USER_NOT_FOUND)
+
+        favorite_genres = [fg.genre.value for fg in user.favorite_genres.all()]
+
+        #NOTE: 유저별 데이터 (빠름 - 개인 데이터만 조회)
+        user_view_logs = VideoViewLog.query.filter_by(user_id=user_id).all()
+        viewed_video_ids = {log.video_id for log in user_view_logs}
+        watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
+        recent_watching_data_objs = watching_data_repo.find_by_user_id(user_id, limit=20)
+
+        #NOTE: 영상 풀 캐시에서 조회 (없으면 DB에서 빌드 후 캐싱)
+        video_pool = HomeService._get_video_pool_from_cache()
+        if video_pool is None:
+            logger.info("video_pool_cache miss → DB에서 빌드")
+            video_pool = HomeService._build_and_cache_video_pool()
+
+        all_videos_dict = list(video_pool.values())
+        video_category_map = {vid: data['category'] for vid, data in video_pool.items()}
 
         user_logs_dict = [
-            {
-                'video_id': log.video_id,
-                'created_at': log.created_at
-            }
+            {'video_id': log.video_id, 'created_at': log.created_at}
             for log in user_view_logs
         ]
-
-        # video_id → category 빠른 조회용 (카테고리별 감정 선호도 계산에 사용)
-        video_category_map = {
-            v.video_id: (v.category.value if hasattr(v.category, 'value') else v.category)
-            for v in all_videos
-        }
 
         recent_watching_data = []
         for wd in recent_watching_data_objs:
             if wd.dominant_emotion is None:
                 continue
-
             emotion_pct = wd.emotion_percentages.to_dict()
-
             recent_watching_data.append({
                 'video_id': wd.video_id,
                 'category': video_category_map.get(wd.video_id),
@@ -234,16 +403,13 @@ class HomeService:
 
         #NOTE: 감정 데이터 부족으로 추천 결과 없음 → 선호 장르 랜덤 폴백
         if not recommended_videos:
-            genre_videos = [
-                v for v in all_videos
-                if (v.category.value if hasattr(v.category, 'value') else v.category) in favorite_genres
-            ]
+            genre_videos = [v for v in all_videos_dict if v.get('category') in favorite_genres]
             sampled = random.sample(genre_videos, min(limit, len(genre_videos)))
             return [
                 BaseVideoDataDto(
-                    video_id=v.video_id,
-                    youtube_url=v.youtube_url,
-                    title=v.title,
+                    video_id=v['video_id'],
+                    youtube_url=v['youtube_url'],
+                    title=v['title'],
                     dominant_emotion=None,
                     dominant_emotion_per=0.0
                 )
@@ -254,125 +420,25 @@ class HomeService:
         for video in recommended_videos:
             emotion_dist = video.get('emotion_distribution', {})
             dominant_emotion = video.get('dominant_emotion', 'none')
-
-            if emotion_dist and dominant_emotion in emotion_dist:
-                dominant_emotion_per = round(emotion_dist[dominant_emotion] * 100.0, 2)
-            else:
-                dominant_emotion_per = 0.0
-
-            video_dto = BaseVideoDataDto(
+            dominant_emotion_per = round(emotion_dist[dominant_emotion] * 100.0, 2) if (emotion_dist and dominant_emotion in emotion_dist) else 0.0
+            result_dtos.append(BaseVideoDataDto(
                 video_id=video['video_id'],
                 youtube_url=video['youtube_url'],
                 title=video['title'],
                 dominant_emotion=dominant_emotion,
                 dominant_emotion_per=dominant_emotion_per
-            )
-            result_dtos.append(video_dto)
+            ))
 
         return result_dtos
 
     @staticmethod
     @transactional_readonly
     def get_videos_by_category_emotions():
-        all_videos = Video.query.filter_by(is_deleted=0).all()
-
-        video_dist_repo = VideoDistributionRepository(mongo_db)
-        video_ids = [video.video_id for video in all_videos]
-        video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
-
-        #NOTE: 카테고리별 전체 영상 풀 (감정 데이터 없을 때 랜덤 폴백용)
-        raw_videos_by_category = {genre.value: [] for genre in GenreEnum}
-        for video in all_videos:
-            cat = video.category.value if hasattr(video.category, 'value') else video.category
-            if cat in raw_videos_by_category:
-                raw_videos_by_category[cat].append(video)
-
-        #NOTE: 감정 데이터가 있는 영상만 분류 (알고리즘 입력용)
-        emotion_videos_by_category = {genre.value: [] for genre in GenreEnum}
-        for video in all_videos:
-            video_distribution_document = video_stats_dict.get(video.video_id)
-
-            emotion_dist = {}
-            if video_distribution_document:
-                emotion_dist = {
-                    'neutral': video_distribution_document.emotion_averages.neutral,
-                    'happy': video_distribution_document.emotion_averages.happy,
-                    'surprise': video_distribution_document.emotion_averages.surprise,
-                    'sad': video_distribution_document.emotion_averages.sad,
-                    'angry': video_distribution_document.emotion_averages.angry
-                }
-
-            if ((not video_distribution_document)
-                    or (video_distribution_document.dominant_emotion is None)
-                    or (not emotion_dist)
-                    or (sum(emotion_dist.values()) == 0)):
-                continue
-
-            video_dict = {
-                'video_id': video.video_id,
-                'youtube_url': video.youtube_url,
-                'title': video.title,
-                'channel_name': video.channel_name,
-                'category': video.category,
-                'duration': video.duration,
-                'view_count': video.view_count,
-                'like_count': video.like_count,
-                'created_at': video.created_at,
-                'emotion_distribution': emotion_dist,
-                'dominant_emotion': video_distribution_document.dominant_emotion,
-                'average_completion_rate': video_distribution_document.average_completion_rate
-            }
-
-            cat = video.category.value if hasattr(video.category, 'value') else video.category
-            if cat in emotion_videos_by_category:
-                emotion_videos_by_category[cat].append(video_dict)
-
-        top_videos_by_category = get_top_videos_by_category_emotion(
-            videos_by_category=emotion_videos_by_category,
-            limit=20
-        )
-
-        category_dtos = []
-        for category_name, videos in top_videos_by_category.items():
-            if videos:
-                video_dtos = []
-                for video in videos:
-                    emotion_dist = video.get('emotion_distribution', {})
-                    dominant_emotion = video.get('dominant_emotion', 'none')
-
-                    if emotion_dist and dominant_emotion in emotion_dist:
-                        dominant_emotion_per = round(emotion_dist[dominant_emotion] * 100.0, 2)
-                    else:
-                        dominant_emotion_per = 0.0
-
-                    video_dtos.append(BaseVideoDataDto(
-                        video_id=video['video_id'],
-                        youtube_url=video['youtube_url'],
-                        title=video['title'],
-                        dominant_emotion=dominant_emotion,
-                        dominant_emotion_per=dominant_emotion_per
-                    ))
-            else:
-                #NOTE: 감정 데이터 없는 카테고리 → 해당 카테고리 랜덤 영상으로 폴백
-                raw_candidates = raw_videos_by_category.get(category_name, [])
-                if not raw_candidates:
-                    continue
-                sampled = random.sample(raw_candidates, min(20, len(raw_candidates)))
-                video_dtos = [
-                    BaseVideoDataDto(
-                        video_id=v.video_id,
-                        youtube_url=v.youtube_url,
-                        title=v.title,
-                        dominant_emotion=None,
-                        dominant_emotion_per=0.0
-                    )
-                    for v in sampled
-                ]
-
-            category_dtos.append(CategoryVideoDataDto(
-                category_name=category_name,
-                videos=video_dtos
-            ))
+        #NOTE: 카테고리 영상 캐시에서 조회 (없으면 DB에서 빌드 후 캐싱)
+        category_dtos = HomeService._get_category_videos_from_cache()
+        if category_dtos is None:
+            logger.info("category_videos_cache miss → DB에서 빌드")
+            category_dtos = HomeService._build_and_cache_category_videos()
 
         return CategoryVideoDataListDto(video_data=category_dtos)
 

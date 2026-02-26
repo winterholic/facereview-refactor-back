@@ -179,22 +179,25 @@ class VideoDistributionRepository:
         # NOTE: 2단계 - emotion_averages, recommendation_scores, average_completion_rate 재계산
         self._recalculate_scores(video_id, category, duration)
 
+        result = self._recalculate_scores(video_id, category, duration)
         logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}, category={category}, duration={duration}")
+        return result
 
-    def _recalculate_scores(self, video_id: str, category: str = None, duration: int = 0):
+    def _recalculate_scores(self, video_id: str, category: str = None, duration: int = 0) -> Optional['VideoDistribution']:
         """
         emotion_counts와 total_frames를 기반으로
         emotion_averages, recommendation_scores, average_completion_rate를 재계산함.
+        계산된 VideoDistribution 객체를 반환 (write-through 캐싱 지원용).
         """
         doc = self.collection.find_one({'video_id': video_id})
         if not doc:
-            return
+            return None
 
         total_frames = doc.get('total_frames', 0)
         emotion_counts = doc.get('emotion_counts', {})
 
         if total_frames == 0:
-            return
+            return None
 
         # NOTE: 카테고리가 파라미터로 안 왔으면 문서에서 가져옴
         if not category:
@@ -238,6 +241,14 @@ class VideoDistributionRepository:
                     'duration': duration
                 }
             }
+        )
+
+        return VideoDistribution(
+            video_id=video_id,
+            average_completion_rate=average_completion_rate,
+            emotion_averages=EmotionAverages(**emotion_averages),
+            recommendation_scores=RecommendationScores(**recommendation_scores),
+            dominant_emotion=dominant_emotion
         )
 
     def find_by_video_id(self, video_id: str) -> Optional[VideoDistribution]:

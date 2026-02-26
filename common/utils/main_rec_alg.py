@@ -1,3 +1,4 @@
+import heapq
 import math
 from datetime import datetime
 from typing import List, Dict
@@ -71,7 +72,8 @@ def calculate_category_emotion_preference(recent_data: List[Dict]) -> Dict[str, 
 
 
 def calculate_personalization_score(video: Dict, favorite_genres: List[str],
-                                    emotion_pref: Dict, recent_data: List[Dict]) -> float:
+                                    emotion_pref: Dict, recent_data: List[Dict],
+                                    cat_emo_pref: Dict = None) -> float:
     score = 0.0
 
     # 선호 카테고리 가산점 (강화)
@@ -83,8 +85,10 @@ def calculate_personalization_score(video: Dict, favorite_genres: List[str],
     video_emo = video.get('emotion_distribution', {})
 
     # 카테고리별 감정 선호도: 같은 카테고리 영상을 볼 때 느낀 감정과 유사한 영상 부스트
+    #NOTE: cat_emo_pref는 루프 밖에서 1회 계산 후 전달받음 (O(n) → O(1))
     if video_emo and recent_data:
-        cat_emo_pref = calculate_category_emotion_preference(recent_data)
+        if cat_emo_pref is None:
+            cat_emo_pref = calculate_category_emotion_preference(recent_data)
         if video_cat and video_cat in cat_emo_pref:
             # 이 카테고리를 시청할 때의 감정 패턴과 영상 감정 분포 유사도
             score += cosine_similarity(cat_emo_pref[video_cat], video_emo) * 35
@@ -201,11 +205,14 @@ def get_personalized_recommendations(all_videos: List[Dict], user_data: Dict,
     if total:
         cat_dist = {k: v/total for k, v in cat_dist.items()}
 
+    #NOTE: cat_emo_pref를 루프 밖에서 1회만 계산 (기존: 영상마다 반복 계산하는 버그 수정)
+    cat_emo_pref = calculate_category_emotion_preference(recent_watching)
+
     scored = []
     for video in all_videos:
         if video['video_id'] in viewed_ids or video.get('is_deleted'):
             continue
-        p = calculate_personalization_score(video, fav_genres, emo_pref, recent_watching)
+        p = calculate_personalization_score(video, fav_genres, emo_pref, recent_watching, cat_emo_pref)
         q = calculate_quality_score(video)
         f = calculate_freshness_score(video)
         d = calculate_diversity_score(video, cat_dist, emo_pref)
@@ -214,7 +221,8 @@ def get_personalized_recommendations(all_videos: List[Dict], user_data: Dict,
         final = apply_emotion_health(final, video, recent_watching)
         scored.append({'video': video, 'score': final})
 
-    scored.sort(key=lambda x: x['score'], reverse=True)
+    #NOTE: 전체 정렬 O(n log n) → 힙으로 top-k 추출 O(n log k), 다양성 필터 여유분으로 limit*3
+    scored = heapq.nlargest(limit * 3, scored, key=lambda x: x['score'])
 
     result, cats, emos = [], [], []
     for item in scored:

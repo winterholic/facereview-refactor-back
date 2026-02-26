@@ -1,5 +1,5 @@
-from typing import Dict, List, Optional
-from datetime import datetime
+from typing import Dict, Optional
+from datetime import datetime, timedelta
 from threading import Lock
 
 
@@ -21,37 +21,29 @@ class WatchingDataCache:
         video_id: str,
         duration: int = None
     ):
-
         with self._lock:
             if video_view_log_id not in self._cache:
+                #NOTE: TTL = duration * 1.5 (영상 길이의 1.5배), fallback 3시간
+                ttl_seconds = int(duration * 1.5) if duration else 10800
+                expiry_time = datetime.utcnow() + timedelta(seconds=ttl_seconds)
                 self._cache[video_view_log_id] = {
                     'user_id': user_id,
                     'video_id': video_id,
                     'duration': duration,
-                    'frames': [],
-                    'created_at': datetime.utcnow()
+                    'created_at': datetime.utcnow(),
+                    'expiry_time': expiry_time
                 }
-
-    def add_frame_data(
-        self,
-        video_view_log_id: str,
-        youtube_running_time: int,
-        emotion_percentages: Dict[str, float],
-        most_emotion: str
-    ):
-
-        with self._lock:
-            if video_view_log_id in self._cache:
-                frame_data = {
-                    'youtube_running_time': youtube_running_time,
-                    'emotion_percentages': emotion_percentages,
-                    'most_emotion': most_emotion
-                }
-                self._cache[video_view_log_id]['frames'].append(frame_data)
 
     def get_watching_data(self, video_view_log_id: str) -> Optional[Dict]:
-        #NOTE: 읽기 전용이므로 락 불필요
-        return self._cache.get(video_view_log_id)
+        data = self._cache.get(video_view_log_id)
+        if data is None:
+            return None
+        #NOTE: lazy expiry — 접근 시 만료 여부 확인
+        if datetime.utcnow() > data['expiry_time']:
+            with self._lock:
+                self._cache.pop(video_view_log_id, None)
+            return None
+        return data
 
     def remove_watching_data(self, video_view_log_id: str) -> Optional[Dict]:
         with self._lock:

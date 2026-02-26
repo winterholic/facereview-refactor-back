@@ -9,7 +9,8 @@
       "Bash(test:*)",
       "Bash(python:*)",
       "Bash(dir:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(.venv/Scripts/python:*)"
     ]
   }
 }
