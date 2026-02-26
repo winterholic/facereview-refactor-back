@@ -26,7 +26,7 @@ watch_blueprint = Blueprint(
 @login_optional
 @watch_blueprint.arguments(GetVideoDetailRequestSchema, location='query')
 @watch_blueprint.response(200, VideoDetailResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="영상 상세 조회 (타임라인 감정 그래프 포함)", security=[{"BearerAuth": []}])
 def get_video_detail(data):
     return WatchService.get_video_detail(data['video_id'], g.user_id)
 
@@ -35,7 +35,7 @@ def get_video_detail(data):
 @login_optional
 @watch_blueprint.arguments(GetRecommendedVideosRequestSchema, location='query')
 @watch_blueprint.response(200, RecommendedVideoListResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="현재 영상 기반 연관 추천 영상 목록", security=[{"BearerAuth": []}])
 def get_recommended_videos(data):
     video_id = data['video_id']
     page = data.get('page', 1)
@@ -48,7 +48,7 @@ def get_recommended_videos(data):
 @login_optional
 @watch_blueprint.arguments(GetCommentListRequestSchema, location='query')
 @watch_blueprint.response(200, CommentListResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="영상 댓글 목록 조회", security=[{"BearerAuth": []}])
 def get_comment_list(data):
     return WatchService.get_comment_list(data['video_id'], g.user_id)
 
@@ -57,7 +57,7 @@ def get_comment_list(data):
 @login_required
 @watch_blueprint.arguments(AddCommentRequestSchema)
 @watch_blueprint.response(200, AddCommentResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="댓글 작성", security=[{"BearerAuth": []}])
 def add_comment(data):
     video_id = data['video_id']
     content = data['content']
@@ -70,7 +70,7 @@ def add_comment(data):
 @login_required
 @watch_blueprint.arguments(UpdateCommentRequestSchema)
 @watch_blueprint.response(200, SuccessResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="댓글 수정", security=[{"BearerAuth": []}])
 def update_comment(data):
     comment_id = data['comment_id']
     content = data['content']
@@ -87,7 +87,7 @@ def update_comment(data):
 @login_required
 @watch_blueprint.arguments(DeleteCommentRequestSchema, location='query')
 @watch_blueprint.response(200, SuccessResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="댓글 삭제", security=[{"BearerAuth": []}])
 def delete_comment(data):
     WatchService.delete_comment(data['comment_id'], g.user_id)
 
@@ -101,6 +101,6 @@ def delete_comment(data):
 @login_required
 @watch_blueprint.arguments(ToggleLikeRequestSchema)
 @watch_blueprint.response(200, ToggleLikeResponseSchema)
-@watch_blueprint.doc(security=[{"BearerAuth": []}])
+@watch_blueprint.doc(summary="좋아요 추가/취소 토글", security=[{"BearerAuth": []}])
 def toggle_like(data):
     return WatchService.toggle_like(data['video_id'], g.user_id)

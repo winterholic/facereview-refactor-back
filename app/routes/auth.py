@@ -25,6 +25,7 @@ auth_blueprint = Blueprint(
 @public_route
 @auth_blueprint.arguments(EmailCheckRequestSchema)
 @auth_blueprint.response(200, EmailCheckResponseSchema)
+@auth_blueprint.doc(summary="이메일 중복 확인")
 def check_duplicate_email(data):
     is_dup = AuthService.check_duplicate_email(data['email'])
 
@@ -43,6 +44,7 @@ def check_duplicate_email(data):
 @public_route
 @auth_blueprint.arguments(SignupRequestSchema)
 @auth_blueprint.response(201, AccessTokenResponseSchema)
+@auth_blueprint.doc(summary="회원가입")
 def signup(data):
     tokens = AuthService.signup(data['email'], data['password'], data['name'], data['favorite_genres'])
 
@@ -62,6 +64,7 @@ def signup(data):
 @public_route
 @auth_blueprint.arguments(LoginRequestSchema)
 @auth_blueprint.response(200, AccessTokenResponseSchema)
+@auth_blueprint.doc(summary="로그인")
 def login(data):
     tokens = AuthService.login(data['email'], data['password'])
 
@@ -80,7 +83,7 @@ def login(data):
 @auth_blueprint.route('/me', methods=['GET'])
 @login_required
 @auth_blueprint.response(200, UserResponseSchema)
-@auth_blueprint.doc(security=[{"BearerAuth": []}])
+@auth_blueprint.doc(summary="내 정보 조회", security=[{"BearerAuth": []}])
 def get_my_info():
     return AuthService.get_my_info(g.user_id)
 
@@ -88,7 +91,7 @@ def get_my_info():
 @auth_blueprint.route('/tutorial', methods=['PATCH'])
 @login_required
 @auth_blueprint.response(200, SuccessResponseSchema)
-@auth_blueprint.doc(security=[{"BearerAuth": []}])
+@auth_blueprint.doc(summary="튜토리얼 완료 처리", security=[{"BearerAuth": []}])
 def complete_tutorial():
     AuthService.complete_tutorial(g.user_id)
     return {
@@ -100,7 +103,7 @@ def complete_tutorial():
 @auth_blueprint.route('/logout', methods=['POST'])
 @login_required
 @auth_blueprint.response(200, SuccessResponseSchema)
-@auth_blueprint.doc(security=[{"BearerAuth": []}])
+@auth_blueprint.doc(summary="로그아웃", security=[{"BearerAuth": []}])
 def logout():
     refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
     if refresh_token:
@@ -117,6 +120,7 @@ def logout():
 @auth_blueprint.route('/reissue', methods=['POST'])
 @public_route
 @auth_blueprint.response(200, AccessTokenResponseSchema)
+@auth_blueprint.doc(summary="액세스 토큰 재발급 (쿠키의 refresh_token 사용)")
 def reissue_token():
     refresh_token = request.cookies.get(REFRESH_TOKEN_COOKIE_NAME)
     if not refresh_token:
@@ -141,5 +145,6 @@ def reissue_token():
 @auth_blueprint.route('/test-token', methods=['POST'])
 @public_route
 @auth_blueprint.response(200, TestTokenResponseSchema)
+@auth_blueprint.doc(summary="테스트용 토큰 발급 (개발 전용)")
 def test_token():
     return AuthService.test_token()

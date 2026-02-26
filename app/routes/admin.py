@@ -50,7 +50,7 @@ def admin_required(func):
 @admin_required
 @admin_blueprint.arguments(GetUsersRequestSchema, location='query')
 @admin_blueprint.response(200, GetUsersResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="회원 목록 조회 (키워드·탈퇴여부 필터)", security=[{"BearerAuth": []}])
 def get_users(args):
     keyword = args.get('keyword')
     is_deleted = args.get('is_deleted')
@@ -63,7 +63,7 @@ def get_users(args):
 @login_required
 @admin_required
 @admin_blueprint.response(200, DeactivateUserResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="회원 비활성화 (논리 삭제)", security=[{"BearerAuth": []}])
 def deactivate_user(user_id):
     return AdminService.deactivate_user(user_id)
 
@@ -73,7 +73,7 @@ def deactivate_user(user_id):
 @admin_required
 @admin_blueprint.arguments(ChangeUserRoleRequestSchema)
 @admin_blueprint.response(200, ChangeUserRoleResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="회원 권한 변경 (USER / ADMIN)", security=[{"BearerAuth": []}])
 def change_user_role(data, user_id):
     role = data['role']
     return AdminService.change_user_role(user_id, role)
@@ -84,7 +84,7 @@ def change_user_role(data, user_id):
 @admin_required
 @admin_blueprint.arguments(GetVideoRequestsRequestSchema, location='query')
 @admin_blueprint.response(200, GetVideoRequestsResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="영상 등록 요청 목록 (상태 필터 가능)", security=[{"BearerAuth": []}])
 def get_video_requests(args):
     status = args.get('status')
     page = args.get('page', 1)
@@ -97,7 +97,7 @@ def get_video_requests(args):
 @admin_required
 @admin_blueprint.arguments(ApproveVideoRequestRequestSchema)
 @admin_blueprint.response(200, ApproveVideoRequestResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="영상 등록 요청 승인 (영상 DB 등록)", security=[{"BearerAuth": []}])
 def approve_video_request(data, request_id):
     youtube_title = data['youtube_title']
     channel_name = data['channel_name']
@@ -110,7 +110,7 @@ def approve_video_request(data, request_id):
 @admin_required
 @admin_blueprint.arguments(RejectVideoRequestRequestSchema)
 @admin_blueprint.response(200, RejectVideoRequestResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="영상 등록 요청 거절 (사유 필수)", security=[{"BearerAuth": []}])
 def reject_video_request(data, request_id):
     admin_comment = data['admin_comment']
     return AdminService.reject_video_request(request_id, admin_comment)
@@ -121,7 +121,7 @@ def reject_video_request(data, request_id):
 @admin_required
 @admin_blueprint.arguments(GetVideosRequestSchema, location='query')
 @admin_blueprint.response(200, GetVideosResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="영상 목록 조회 (키워드·카테고리 필터)", security=[{"BearerAuth": []}])
 def get_videos(args):
     keyword = args.get('keyword')
     category = args.get('category')
@@ -134,7 +134,7 @@ def get_videos(args):
 @login_required
 @admin_required
 @admin_blueprint.response(200, DeleteVideoResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="영상 삭제 (논리 삭제)", security=[{"BearerAuth": []}])
 def delete_video(video_id):
     return AdminService.delete_video(video_id)
 
@@ -144,7 +144,7 @@ def delete_video(video_id):
 @admin_required
 @admin_blueprint.arguments(GetCommentsRequestSchema, location='query')
 @admin_blueprint.response(200, GetCommentsResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="댓글 목록 조회 (영상·키워드·삭제여부 필터)", security=[{"BearerAuth": []}])
 def get_comments(args):
     video_id = args.get('video_id')
     keyword = args.get('keyword')
@@ -158,7 +158,7 @@ def get_comments(args):
 @login_required
 @admin_required
 @admin_blueprint.response(200, DeleteCommentResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="댓글 삭제 (논리 삭제)", security=[{"BearerAuth": []}])
 def delete_comment(comment_id):
     return AdminService.delete_comment(comment_id)
 
@@ -167,7 +167,7 @@ def delete_comment(comment_id):
 @login_required
 @admin_required
 @admin_blueprint.response(200, SystemStatusResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="서버·DB·인프라 상태 및 API 통계 조회", security=[{"BearerAuth": []}])
 def get_system_status():
     return AdminService.get_system_status()
 
@@ -177,7 +177,7 @@ def get_system_status():
 @admin_required
 @admin_blueprint.arguments(GenerateDummyDataRequestSchema, location='query')
 @admin_blueprint.response(200, GenerateDummyDataResponseSchema)
-@admin_blueprint.doc(security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="테스트용 시청 더미 데이터 생성 (count: 10~300)", security=[{"BearerAuth": []}])
 def generate_dummy_data(args):
     count = args.get('count', 30)
     return AdminService.generate_dummy_data(g.user_id, count)

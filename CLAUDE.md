@@ -2,6 +2,10 @@
 
 YouTube 영상 시청 중 웹캠으로 감정을 실시간 분석하고, 감정 기반 영상 추천을 제공하는 Flask 백엔드 서비스.
 
+## 보안 주의
+
+- `.env` 파일은 절대 읽지 않는다
+
 ## 기술 스택
 
 - **웹 프레임워크**: Flask + Flask-Smorest (OpenAPI/Swagger 자동 생성) + Flask-SocketIO
@@ -47,17 +51,50 @@ common/
 - `@transactional`: MySQL 커밋/롤백 자동 처리. 쓰기 작업에 사용
 - `@transactional_readonly`: 읽기 전용 쿼리에 사용
 
+### 라우터 규칙
+- `flask.views` 사용 금지 — 무조건 개별 메서드 선언
+- 비즈니스 로직 직접 작성 금지, DB 모델 직접 접근 금지
+- 라우터에서 try-except로 에러를 직접 잡지 않는다 — `response_error` 로 처리
+
+### 서비스 규칙
+- `flask.jsonify()` 등 HTTP 응답 객체 반환 금지 — 순수 데이터(dict/DTO)만 반환
+- Python 내장 에러(`ValueError`, `TypeError` 등) raise 금지
+
 ### 에러 처리
-- 비즈니스 예외는 `BusinessError(APIError.XXX)` 사용 (HTTPException 자동 변환)
-- `APIError` enum에 에러 코드/HTTP 상태/메시지 정의
+- 비즈니스 예외는 반드시 `BusinessError(APIError.XXX)` 사용 (HTTPException 자동 변환)
+- `APIError` enum에 해당 코드가 없으면 **기존 것 대충 쓰지 말고** `common/enum/error_code.py`에 새 Enum 추가 후 사용
+- 메시지 오버라이딩: `BusinessError(APIError.XXX, "구체적인 메시지")`
+
+### 응답 포맷
+- 성공: `return response_success(data={...}, message="...")`
+  → `{"result": "success", "message": "...", "data": {...}, "code": null}`
+- 실패: 전역 핸들러가 자동 처리
+  → `{"result": "fail", "message": "...", "data": null, "code": "U001"}`
+
+### 인증 데코레이터 3종
+- `@login_required`: 토큰 필수. 없거나 유효하지 않으면 즉시 에러
+- `@login_optional`: 토큰 있으면 검증(로그인), 없으면 게스트로 처리. 단, 만료/위조 토큰은 에러
+- `@public_route`: 인증 불필요 명시 (회원가입·로그인 등)
+
+### Flask.g 컨텍스트 (인증 후 주입)
+- `g.user_id`: 로그인 유저 UUID / 비로그인 None
+- `g.is_guest`: 로그인 False / 비로그인 True
+- 라우터에서 `if g.is_guest:` 또는 `if g.user_id:`로 분기
+
+### 설정값 접근
+- `os.environ` 직접 접근 금지 — 반드시 `current_app.config.get('KEY')` 사용
 
 ### MongoDB 접근
 - 각 컬렉션에 Repository 클래스 (find, insert, upsert 메서드)
 - `common/extensions.py`의 `mongo_db` 객체를 Repository 생성자에 전달
 
+### Redis 키 네이밍
+- 다른 프로젝트와 Redis를 공유하므로 모든 키에 `facereview:` 프리픽스 필수
+- 예: `facereview:session:{id}:timeline`, `facereview:video:{id}:category`
+
 ### 소켓 이벤트 (시청 중 실시간)
-- `watch_frame`: 클라이언트에서 프레임 감정 데이터 수신 → Redis 캐시에 누적
-- `stop_watching`: 캐시 → MongoDB 영구 저장 트리거
+- `watch_frame`: 클라이언트에서 프레임 감정 데이터 수신 → 실시간 MongoDB 저장
+- `end_watching`: 캐시 → Celery를 통한 영구 저장 트리거
 - 타임라인 키는 **centisecond 단위** (`초 × 100`): `20.29초 → "2029"`
 
 ## 코드 컨벤션
@@ -66,7 +103,7 @@ common/
 - **주석 최소화**: 코드로 의도가 명확하면 주석 없음
 - **비자명한 로직만** `#NOTE:` 사용 (공백 없이, 콜론 포함)
 - docstring 사용하지 않음
-- `#NOTE:`, `#FIXME:`, `#TODO:`, `#IMPORTANT:` 주석만 사용
+- 허용 주석 태그: `#NOTE:`, `#FIXME:`, `#TODO:`, `#IMPORTANT:`
 
 ### 로그
 - 모든 로그 메시지는 **한국어**
@@ -84,7 +121,7 @@ common/
 `drama, eating, travel, cook, show, information, game, sports, music, animal, beauty, comedy, horror, exercise, vlog, etc`
 
 ### YoutubeWatchingData (MongoDB)
-- `emotion_score_timeline`: `{centisecond_str: [neutral, happy, surprise, sad, angry]}`
+- `emotion_score_timeline`: `{centisecond_str: [neutral, happy, surprise, sad, angry]}` (0~100 스케일)
 - `most_emotion_timeline`: `{centisecond_str: emotion_name}`
 - `emotion_percentages`: 세션 전체 감정 비율 (0~1)
 - `completion_rate`: 시청 완료율 (0~1)
