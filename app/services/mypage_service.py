@@ -39,8 +39,6 @@ from app.dto.mypage import (
     HighlightDto,
     EmotionVideoDto,
     CategoryEmotionHighlightDto,
-    VideoTimelineDto,
-    TimelineEmotionPointDto,
     PasswordResetDto,
     CalendarDayDto,
     EmotionCalendarDto,
@@ -276,13 +274,10 @@ class MypageService:
         else:
             compressed_lists = emotion_lists
 
-        timeline_dtos = []
-        for emotion_name, points in compressed_lists.items():
-            emotion_points = [TimelineEmotionPointDto(x=p['x'], y=p['y']) for p in points]
-            timeline_dto = VideoTimelineDto(id=emotion_name, data=emotion_points)
-            timeline_dtos.append(timeline_dto)
-
-        return timeline_dtos
+        return {
+            emotion_name: [{'x': p['x'], 'y': p['y']} for p in points]
+            for emotion_name, points in compressed_lists.items()
+        }
 
     @staticmethod
     @transactional_readonly

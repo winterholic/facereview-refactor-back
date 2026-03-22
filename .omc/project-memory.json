@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1771645309201,
+  "lastScanned": 1774173909896,
   "projectRoot": "F:\\mydevelop\\new-facereview",
   "techStack": {
     "languages": [
@@ -48,7 +48,7 @@
       "path": "app",
       "purpose": "Application code",
       "fileCount": 1,
-      "lastAccessed": 1771645308680,
+      "lastAccessed": 1774173909868,
       "keyFiles": [
         "__init__.py"
       ]
@@ -57,7 +57,7 @@
       "path": "common",
       "purpose": null,
       "fileCount": 3,
-      "lastAccessed": 1771645308681,
+      "lastAccessed": 1774173909869,
       "keyFiles": [
         "celery_app.py",
         "extensions.py",
@@ -68,7 +68,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 16,
-      "lastAccessed": 1771645308681,
+      "lastAccessed": 1774173909869,
       "keyFiles": [
         "ADMIN_FEATURES.md",
         "API.md",
@@ -81,7 +81,7 @@
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 1,
-      "lastAccessed": 1771645308682,
+      "lastAccessed": 1774173909870,
       "keyFiles": [
         "saga_pattern_example.py"
       ]
@@ -90,7 +90,7 @@
       "path": "origin-codes",
       "purpose": null,
       "fileCount": 9,
-      "lastAccessed": 1771645308682,
+      "lastAccessed": 1774173909870,
       "keyFiles": [
         "admin.py",
         "gate.py",
@@ -103,7 +103,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 1,
-      "lastAccessed": 1771645308683,
+      "lastAccessed": 1774173909871,
       "keyFiles": [
         "deploy.sh"
       ]
@@ -112,14 +112,14 @@
       "path": "tests",
       "purpose": "Test files",
       "fileCount": 0,
-      "lastAccessed": 1771645308683,
+      "lastAccessed": 1774173909871,
       "keyFiles": []
     },
     "__pycache__": {
       "path": "__pycache__",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1771645308683,
+      "lastAccessed": 1774173909871,
       "keyFiles": [
         "run.cpython-310.pyc"
       ]
@@ -127,19 +127,19 @@
     "app\\models": {
       "path": "app\\models",
       "purpose": "Data models",
-      "fileCount": 9,
-      "lastAccessed": 1771645308684,
+      "fileCount": 11,
+      "lastAccessed": 1774173909872,
       "keyFiles": [
         "comment.py",
         "user.py",
-        "user_favorite_genre.py"
+        "user_emotion_dna.py"
       ]
     },
     "app\\routes": {
       "path": "app\\routes",
       "purpose": "Route handlers",
       "fileCount": 8,
-      "lastAccessed": 1771645308684,
+      "lastAccessed": 1774173909872,
       "keyFiles": [
         "admin.py",
         "auth.py",
@@ -150,7 +150,7 @@
       "path": "app\\schemas",
       "purpose": "Schema definitions",
       "fileCount": 7,
-      "lastAccessed": 1771645308684,
+      "lastAccessed": 1774173909873,
       "keyFiles": [
         "admin.py",
         "auth.py",
@@ -161,7 +161,7 @@
       "path": "app\\services",
       "purpose": "Business logic services",
       "fileCount": 7,
-      "lastAccessed": 1771645308684,
+      "lastAccessed": 1774173909873,
       "keyFiles": [
         "admin_service.py",
         "auth_service.py",
@@ -172,7 +172,7 @@
       "path": "common\\config",
       "purpose": "Configuration files",
       "fileCount": 3,
-      "lastAccessed": 1771645308684,
+      "lastAccessed": 1774173909874,
       "keyFiles": [
         "celery_config.py",
         "config.py",
@@ -182,15 +182,45 @@
   },
   "hotPaths": [
     {
-      "path": "C:\\Users\\iuhol\\.claude\\settings.json",
-      "accessCount": 4,
-      "lastAccessed": 1771646097116,
+      "path": "app\\services\\mypage_service.py",
+      "accessCount": 5,
+      "lastAccessed": 1774174455728,
       "type": "file"
     },
     {
-      "path": "C:\\Users\\iuhol\\.claude\\hud\\omc-hud.mjs",
+      "path": "app\\dto\\mypage.py",
+      "accessCount": 3,
+      "lastAccessed": 1774174466364,
+      "type": "file"
+    },
+    {
+      "path": "app\\routes\\mypage.py",
       "accessCount": 1,
-      "lastAccessed": 1771645719968,
+      "lastAccessed": 1774174393690,
+      "type": "file"
+    },
+    {
+      "path": "app\\routes\\watch.py",
+      "accessCount": 1,
+      "lastAccessed": 1774174397399,
+      "type": "file"
+    },
+    {
+      "path": "origin-codes\\mypage.py",
+      "accessCount": 1,
+      "lastAccessed": 1774174397683,
+      "type": "file"
+    },
+    {
+      "path": "app\\services\\watch_service.py",
+      "accessCount": 1,
+      "lastAccessed": 1774174402880,
+      "type": "file"
+    },
+    {
+      "path": "app\\dto\\watch.py",
+      "accessCount": 1,
+      "lastAccessed": 1774174406288,
       "type": "file"
     }
   ],

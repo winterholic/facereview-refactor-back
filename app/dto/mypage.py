@@ -36,7 +36,7 @@ class RecentVideoDto:
     dominant_emotion: str
     dominant_emotion_per: float
     watched_at: str
-    timeline_data: List[VideoTimelineDto]
+    timeline_data: Dict
 
     def to_dict(self):
         return {
@@ -46,7 +46,7 @@ class RecentVideoDto:
             'dominant_emotion': self.dominant_emotion,
             'dominant_emotion_per': self.dominant_emotion_per,
             'watched_at': self.watched_at,
-            'timeline_data': [t.to_dict() for t in self.timeline_data]
+            'timeline_data': self.timeline_data
         }
 
 
