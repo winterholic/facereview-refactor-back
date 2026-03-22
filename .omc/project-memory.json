@@ -183,14 +183,20 @@
   "hotPaths": [
     {
       "path": "app\\services\\mypage_service.py",
-      "accessCount": 5,
-      "lastAccessed": 1774174455728,
+      "accessCount": 8,
+      "lastAccessed": 1774200926552,
       "type": "file"
     },
     {
       "path": "app\\dto\\mypage.py",
       "accessCount": 3,
       "lastAccessed": 1774174466364,
+      "type": "file"
+    },
+    {
+      "path": "app\\__init__.py",
+      "accessCount": 3,
+      "lastAccessed": 1774200806154,
       "type": "file"
     },
     {
@@ -222,6 +228,18 @@
       "accessCount": 1,
       "lastAccessed": 1774174406288,
       "type": "file"
+    },
+    {
+      "path": "common\\extensions.py",
+      "accessCount": 1,
+      "lastAccessed": 1774200786911,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1774200790463,
+      "type": "directory"
     }
   ],
   "userDirectives": []

@@ -122,7 +122,9 @@ def create_app(config_name='default'):
         mongo_connection = MongoClient(
             mongo_uri,
             serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000
+            connectTimeoutMS=5000,
+            minPoolSize=2,
+            maxIdleTimeMS=60000
         )
         mongo_connection.admin.command('ping')
         logger.info(f"MongoDB 연결 성공: {mongo_host}:{mongo_port}")

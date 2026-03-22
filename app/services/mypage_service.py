@@ -172,18 +172,25 @@ class MypageService:
         if emotion != 'all':
             query['dominant_emotion'] = emotion
 
-        total = collection.count_documents(query)
-
         skip = (page - 1) * size
-        has_next = (skip + size) < total
 
-        watching_data_docs = collection.find(query).sort('created_at', -1).skip(skip).limit(size)
+        #NOTE: size+1개 조회로 has_next 판단 (count_documents 왕복 제거)
+        raw_docs = list(collection.find(query).sort('created_at', -1).skip(skip).limit(size + 1))
+        has_next = len(raw_docs) > size
+        docs_to_process = raw_docs[:size]
+
+        #NOTE: N+1 방지 — video_id 일괄 조회
+        video_ids = [doc['video_id'] for doc in docs_to_process]
+        video_map = {
+            v.video_id: v
+            for v in Video.query.filter(
+                Video.video_id.in_(video_ids), Video.is_deleted == 0
+            ).all()
+        }
 
         videos = []
-        for doc in watching_data_docs:
-            video_id = doc['video_id']
-
-            video = Video.query.filter_by(video_id=video_id, is_deleted=0).first()
+        for doc in docs_to_process:
+            video = video_map.get(doc['video_id'])
             if not video:
                 continue
 
@@ -206,7 +213,7 @@ class MypageService:
 
         result = RecentVideoListDto(
             videos=videos,
-            total=total,
+            total=skip + len(videos) + (1 if has_next else 0),
             page=page,
             size=size,
             has_next=has_next
