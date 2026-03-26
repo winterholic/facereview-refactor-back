@@ -77,7 +77,7 @@ class WatchingDataService:
             client_info=client_info
         )
 
-        watching_data_repo.insert(watching_data)
+        watching_data_repo.finalize(watching_data)
         logger.info(f"시청 데이터 저장 완료: {video_view_log_id}")
 
         #NOTE: video_distribution 평균/추천점수 업데이트 (기존 로직 유지)

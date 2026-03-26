@@ -240,6 +240,42 @@ class YoutubeWatchingDataRepository:
             upsert=True
         )
 
+    def finalize(self, watching_data: 'YoutubeWatchingData') -> Dict[str, any]:
+        from flask import g
+
+        result = self.collection.update_one(
+            {'video_view_log_id': watching_data.video_view_log_id},
+            {
+                '$set': {
+                    'emotion_percentages': watching_data.emotion_percentages.to_dict(),
+                    'dominant_emotion': watching_data.dominant_emotion,
+                    'completion_rate': watching_data.completion_rate,
+                    'most_emotion_timeline': watching_data.most_emotion_timeline,
+                    'emotion_score_timeline': watching_data.emotion_score_timeline,
+                    'client_info': watching_data.client_info.to_dict(),
+                    'updated_at': datetime.utcnow()
+                },
+                '$setOnInsert': {
+                    'user_id': watching_data.user_id,
+                    'video_id': watching_data.video_id,
+                    'video_view_log_id': watching_data.video_view_log_id,
+                    'created_at': watching_data.created_at,
+                    'frame_count': 0
+                }
+            },
+            upsert=True
+        )
+
+        compensation_data = {
+            'video_view_log_id': watching_data.video_view_log_id,
+            'is_new': result.upserted_id is not None
+        }
+
+        if hasattr(g, 'saga_context'):
+            g.saga_context.save_result(f'insert_watching_data_{watching_data.video_view_log_id}', compensation_data)
+
+        return compensation_data
+
     def compensate_insert(self, compensation_data: Dict[str, any]):
         video_view_log_id = compensation_data['video_view_log_id']
 

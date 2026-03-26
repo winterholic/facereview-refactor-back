@@ -183,14 +183,32 @@
   "hotPaths": [
     {
       "path": "app\\services\\mypage_service.py",
-      "accessCount": 6,
-      "lastAccessed": 1774513468095,
+      "accessCount": 12,
+      "lastAccessed": 1774521883208,
       "type": "file"
     },
     {
       "path": "app\\schemas\\mypage.py",
+      "accessCount": 5,
+      "lastAccessed": 1774513712320,
+      "type": "directory"
+    },
+    {
+      "path": "app\\models\\mongodb\\youtube_watching_data.py",
+      "accessCount": 4,
+      "lastAccessed": 1774521994898,
+      "type": "file"
+    },
+    {
+      "path": "app\\services\\watching_data_service.py",
+      "accessCount": 4,
+      "lastAccessed": 1774522004652,
+      "type": "file"
+    },
+    {
+      "path": "",
       "accessCount": 3,
-      "lastAccessed": 1774513532315,
+      "lastAccessed": 1774521883498,
       "type": "directory"
     },
     {
@@ -212,10 +230,16 @@
       "type": "directory"
     },
     {
-      "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1774512316144,
+      "path": "app\\models\\user_emotion_dna.py",
+      "accessCount": 2,
+      "lastAccessed": 1774513741967,
       "type": "directory"
+    },
+    {
+      "path": "app\\sockets\\video_watching_socket.py",
+      "accessCount": 2,
+      "lastAccessed": 1774521920816,
+      "type": "file"
     },
     {
       "path": "app\\routes\\home.py",
@@ -252,6 +276,18 @@
       "accessCount": 1,
       "lastAccessed": 1774513468908,
       "type": "file"
+    },
+    {
+      "path": "app\\models\\__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513831742,
+      "type": "file"
+    },
+    {
+      "path": "app",
+      "accessCount": 1,
+      "lastAccessed": 1774521892353,
+      "type": "directory"
     }
   ],
   "userDirectives": []
