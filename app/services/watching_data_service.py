@@ -19,18 +19,22 @@ class WatchingDataService:
 
         user_id = cached_data['user_id']
         video_id = cached_data['video_id']
-        frames = cached_data['frames']
         video_duration = duration or cached_data.get('duration')
-
-        if not frames:
-            logger.info(f"프레임 데이터 없음: {video_view_log_id}")
-            return
 
         mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
         watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
 
-        emotion_stats = WatchingDataService._calculate_emotion_statistics(frames)
-        completion_rate = WatchingDataService._calculate_completion_rate(frames, video_duration)
+        #NOTE: upsert_frame이 실시간으로 쌓은 MongoDB 도큐먼트에서 타임라인 데이터를 읽어 통계 계산
+        existing = watching_data_repo.find_by_video_view_log_id(video_view_log_id)
+        if not existing or not existing.emotion_score_timeline:
+            logger.info(f"시청 타임라인 데이터 없음: {video_view_log_id}")
+            return
+
+        emotion_stats = WatchingDataService._calculate_emotion_statistics_from_timeline(
+            existing.emotion_score_timeline
+        )
+        frame_count = len(existing.emotion_score_timeline)
+        completion_rate = WatchingDataService._calculate_completion_rate_from_count(frame_count, video_duration)
 
         emotion_percentages = EmotionPercentages(
             neutral=emotion_stats['emotion_percentages']['neutral'],
@@ -48,32 +52,16 @@ class WatchingDataService:
             client_info.device_browser = client_info_dict.get('device_browser')
             client_info.is_mobile = client_info_dict.get('is_mobile', False)
 
-        most_emotion_timeline = {}
-        emotion_score_timeline = {}
-        for frame in frames:
-            #NOTE: upsert_frame과 동일하게 centisecond 단위로 변환 (20.29초 → "2029")
-            time_key = str(int(float(frame['youtube_running_time']) * 100))
-            most_emotion_timeline[time_key] = frame['most_emotion']
-
-            emotion_percentages_dict = frame['emotion_percentages']
-            emotion_score_timeline[time_key] = [
-                emotion_percentages_dict.get('neutral', 0.0),
-                emotion_percentages_dict.get('happy', 0.0),
-                emotion_percentages_dict.get('surprise', 0.0),
-                emotion_percentages_dict.get('sad', 0.0),
-                emotion_percentages_dict.get('angry', 0.0)
-            ]
-
         watching_data = YoutubeWatchingData(
             user_id=user_id,
             video_id=video_id,
             video_view_log_id=video_view_log_id,
-            created_at=datetime.utcnow(),
+            created_at=existing.created_at,
             completion_rate=completion_rate,
             dominant_emotion=emotion_stats['dominant_emotion'],
             emotion_percentages=emotion_percentages,
-            most_emotion_timeline=most_emotion_timeline,
-            emotion_score_timeline=emotion_score_timeline,
+            most_emotion_timeline=existing.most_emotion_timeline,
+            emotion_score_timeline=existing.emotion_score_timeline,
             client_info=client_info
         )
 
@@ -149,6 +137,44 @@ class WatchingDataService:
 
         #NOTE: 100%를 초과할 수 없음 (유저가 반복 재생할 경우 방지)
         return min(1.0, completion_rate)
+
+    @staticmethod
+    def _calculate_emotion_statistics_from_timeline(emotion_score_timeline: Dict) -> Dict:
+        #NOTE: emotion_score_timeline 형식: {centisecond_str: [neutral, happy, surprise, sad, angry]} (0~100 스케일)
+        labels = ['neutral', 'happy', 'surprise', 'sad', 'angry']
+        emotion_sums = {label: 0.0 for label in labels}
+
+        for scores in emotion_score_timeline.values():
+            for i, label in enumerate(labels):
+                emotion_sums[label] += scores[i]
+
+        frame_count = len(emotion_score_timeline)
+        if frame_count == 0:
+            return {
+                'emotion_percentages': {label: 0.0 for label in labels},
+                'dominant_emotion': 'neutral'
+            }
+
+        emotion_percentages = {
+            label: round(emotion_sums[label] / frame_count / 100.0, 3)
+            for label in labels
+        }
+        dominant_emotion = max(emotion_percentages, key=emotion_percentages.get)
+
+        return {
+            'emotion_percentages': emotion_percentages,
+            'dominant_emotion': dominant_emotion
+        }
+
+    @staticmethod
+    def _calculate_completion_rate_from_count(frame_count: int, duration: int = None) -> float:
+        if frame_count == 0:
+            return 0.0
+        if not duration:
+            return min(1.0, frame_count / 1000.0)
+        #NOTE: 0.1초(100ms) 단위로 프레임 전송 → 최대 프레임 개수 = duration * 10
+        max_frame_count = duration * 10
+        return min(1.0, frame_count / max_frame_count if max_frame_count > 0 else 0.0)
 
     @staticmethod
     def _update_timeline_emotion_count(

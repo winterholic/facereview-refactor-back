@@ -188,9 +188,15 @@
       "type": "file"
     },
     {
+      "path": "app\\services\\watching_data_service.py",
+      "accessCount": 10,
+      "lastAccessed": 1774528831695,
+      "type": "file"
+    },
+    {
       "path": "app\\sockets\\video_watching_socket.py",
-      "accessCount": 7,
-      "lastAccessed": 1774528242735,
+      "accessCount": 8,
+      "lastAccessed": 1774528640512,
       "type": "file"
     },
     {
@@ -201,14 +207,8 @@
     },
     {
       "path": "app\\models\\mongodb\\youtube_watching_data.py",
-      "accessCount": 4,
-      "lastAccessed": 1774521994898,
-      "type": "file"
-    },
-    {
-      "path": "app\\services\\watching_data_service.py",
-      "accessCount": 4,
-      "lastAccessed": 1774522004652,
+      "accessCount": 5,
+      "lastAccessed": 1774528647357,
       "type": "file"
     },
     {
@@ -299,6 +299,18 @@
       "path": "run.py",
       "accessCount": 1,
       "lastAccessed": 1774528164058,
+      "type": "file"
+    },
+    {
+      "path": "common\\cache\\watching_data_cache.py",
+      "accessCount": 1,
+      "lastAccessed": 1774528668184,
+      "type": "file"
+    },
+    {
+      "path": "common\\tasks\\watching_data_tasks.py",
+      "accessCount": 1,
+      "lastAccessed": 1774528668553,
       "type": "file"
     }
   ],
