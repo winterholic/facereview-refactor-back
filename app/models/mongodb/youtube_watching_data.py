@@ -222,13 +222,6 @@ class YoutubeWatchingDataRepository:
                         'sad': 0.0,
                         'angry': 0.0
                     },
-                    'emotion_sum': {
-                        'neutral': 0.0,
-                        'happy': 0.0,
-                        'surprise': 0.0,
-                        'sad': 0.0,
-                        'angry': 0.0
-                    },
                     'client_info': {
                         'ip_address': None,
                         'user_agent': None,
