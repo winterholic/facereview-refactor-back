@@ -121,15 +121,17 @@ def handle_watch_frame(message):
 
         #NOTE: 캐시 데이터가 없으면 초기화 (기존 init_watching 역할)
         cached_data = watching_cache.get_watching_data(video_view_log_id)
-        if not cached_data:
+        is_first_frame = not cached_data
+        if is_first_frame:
             watching_cache.init_watching_data(
                 video_view_log_id=video_view_log_id,
                 user_id=user_id,
                 video_id=video_id,
                 duration=duration
             )
-            #NOTE: Redis에 타임라인 평균 감정 데이터 미리 캐싱 (최초 1회)
-            _cache_timeline_emotion_data(video_view_log_id, video_id)
+            #NOTE: MongoDB 읽기+Redis 쓰기는 느리므로 백그라운드에서 처리 (첫 프레임 응답 블로킹 방지)
+            app = current_app._get_current_object()
+            socketio.start_background_task(_cache_timeline_emotion_data_bg, app, video_view_log_id, video_id)
 
             #NOTE: RDB video_view_log 테이블에 시청 기록 저장 (최초 1회)
             _create_video_view_log(video_view_log_id, user_id, video_id)
@@ -157,8 +159,8 @@ def handle_watch_frame(message):
             most_emotion=user_emotion['most_emotion']
         )
 
-        #NOTE: 평균 감정 데이터 조회 (현재 프레임 저장 전에 조회해야 내 데이터가 포함 안 됨)
-        average_emotion = _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
+        #NOTE: 첫 프레임은 타임라인 캐시가 백그라운드 로딩 중이므로 skip
+        average_emotion = None if is_first_frame else _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
 
         #NOTE: 실시간 통계 업데이트 (MongoDB 3개 컬렉션 저장) - 평균 조회 후에 저장
         _update_realtime_statistics(
@@ -262,6 +264,11 @@ def handle_end_watching(message):
             'status': 'error',
             'message': str(e)
         }
+
+
+def _cache_timeline_emotion_data_bg(app, video_view_log_id: str, video_id: str):
+    with app.app_context():
+        _cache_timeline_emotion_data(video_view_log_id, video_id)
 
 
 def _get_average_emotion_at_time(video_view_log_id: str, youtube_running_time: float) -> dict:

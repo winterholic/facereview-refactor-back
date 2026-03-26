@@ -247,5 +247,8 @@ def create_app(config_name='default'):
         }, 200
 
     from app.sockets import video_watching_socket
+    from app.sockets.video_watching_socket import get_emotion_analyzer
+    get_emotion_analyzer()
+    logger.info("EmotionAnalyzer 앱 시작 시 사전 로드 완료")
 
     return app
