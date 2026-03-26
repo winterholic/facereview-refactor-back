@@ -44,6 +44,7 @@ from app.dto.mypage import (
     EmotionCalendarDto,
     MomentDto,
     DnaTraitDto,
+    VideoTimelineDto,
 )
 
 
@@ -174,12 +175,10 @@ class MypageService:
 
         skip = (page - 1) * size
 
-        #NOTE: size+1개 조회로 has_next 판단 (count_documents 왕복 제거)
         raw_docs = list(collection.find(query).sort('created_at', -1).skip(skip).limit(size + 1))
         has_next = len(raw_docs) > size
         docs_to_process = raw_docs[:size]
 
-        #NOTE: N+1 방지 — video_id 일괄 조회
         video_ids = [doc['video_id'] for doc in docs_to_process]
         video_map = {
             v.video_id: v
@@ -198,7 +197,7 @@ class MypageService:
 
             emotion_percentages = doc.get('emotion_percentages', {})
             dominant_emotion = doc.get('dominant_emotion', 'neutral')
-            dominant_emotion_per = emotion_percentages.get(dominant_emotion, 0.0)
+            dominant_emotion_per = round(float(emotion_percentages.get(dominant_emotion, 0.0)) * 100, 2)
 
             video_dto = RecentVideoDto(
                 video_id=video.video_id,
