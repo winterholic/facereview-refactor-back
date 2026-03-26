@@ -72,7 +72,7 @@ class RecentVideoSchema(Schema):
     dominant_emotion = fields.String()
     dominant_emotion_per = fields.Float()
     watched_at = fields.String()
-    timeline_data = fields.List(fields.Nested(VideoTimelineSchema))
+    timeline_data = fields.Dict(keys=fields.String(), values=fields.List(fields.Nested(TimelineEmotionPointSchema)))
 
 
 class RecentVideoListResponseSchema(Schema):

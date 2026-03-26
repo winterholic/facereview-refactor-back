@@ -183,9 +183,15 @@
   "hotPaths": [
     {
       "path": "app\\services\\mypage_service.py",
-      "accessCount": 4,
-      "lastAccessed": 1774512327218,
+      "accessCount": 6,
+      "lastAccessed": 1774513468095,
       "type": "file"
+    },
+    {
+      "path": "app\\schemas\\mypage.py",
+      "accessCount": 3,
+      "lastAccessed": 1774513532315,
+      "type": "directory"
     },
     {
       "path": "app\\services\\home_service.py",
@@ -200,15 +206,15 @@
       "type": "file"
     },
     {
-      "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1774512316144,
+      "path": "app\\dto\\mypage.py",
+      "accessCount": 2,
+      "lastAccessed": 1774513468636,
       "type": "directory"
     },
     {
-      "path": "app\\dto\\mypage.py",
+      "path": "",
       "accessCount": 1,
-      "lastAccessed": 1774512320816,
+      "lastAccessed": 1774512316144,
       "type": "directory"
     },
     {
@@ -221,6 +227,30 @@
       "path": "common\\utils\\main_rec_alg.py",
       "accessCount": 1,
       "lastAccessed": 1774513064468,
+      "type": "file"
+    },
+    {
+      "path": "app\\routes\\mypage.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513455409,
+      "type": "file"
+    },
+    {
+      "path": "app\\routes\\watch.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513455592,
+      "type": "file"
+    },
+    {
+      "path": "app\\services\\watch_service.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513460791,
+      "type": "file"
+    },
+    {
+      "path": "app\\dto\\watch.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513468908,
       "type": "file"
     }
   ],
