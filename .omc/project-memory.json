@@ -182,21 +182,27 @@
   },
   "hotPaths": [
     {
+      "path": "app\\services\\watching_data_service.py",
+      "accessCount": 16,
+      "lastAccessed": 1774538690732,
+      "type": "file"
+    },
+    {
       "path": "app\\services\\mypage_service.py",
       "accessCount": 12,
       "lastAccessed": 1774521883208,
       "type": "file"
     },
     {
-      "path": "app\\services\\watching_data_service.py",
-      "accessCount": 10,
-      "lastAccessed": 1774528831695,
+      "path": "app\\sockets\\video_watching_socket.py",
+      "accessCount": 9,
+      "lastAccessed": 1774538399224,
       "type": "file"
     },
     {
-      "path": "app\\sockets\\video_watching_socket.py",
-      "accessCount": 8,
-      "lastAccessed": 1774528640512,
+      "path": "app\\models\\mongodb\\youtube_watching_data.py",
+      "accessCount": 6,
+      "lastAccessed": 1774538399558,
       "type": "file"
     },
     {
@@ -206,21 +212,15 @@
       "type": "directory"
     },
     {
-      "path": "app\\models\\mongodb\\youtube_watching_data.py",
-      "accessCount": 5,
-      "lastAccessed": 1774528647357,
-      "type": "file"
-    },
-    {
       "path": "",
-      "accessCount": 3,
-      "lastAccessed": 1774521883498,
+      "accessCount": 4,
+      "lastAccessed": 1774538510979,
       "type": "directory"
     },
     {
       "path": "app\\__init__.py",
-      "accessCount": 3,
-      "lastAccessed": 1774528243307,
+      "accessCount": 4,
+      "lastAccessed": 1774538516748,
       "type": "file"
     },
     {
@@ -246,6 +246,12 @@
       "accessCount": 2,
       "lastAccessed": 1774513741967,
       "type": "directory"
+    },
+    {
+      "path": "common\\tasks\\watching_data_tasks.py",
+      "accessCount": 2,
+      "lastAccessed": 1774538410342,
+      "type": "file"
     },
     {
       "path": "app\\routes\\home.py",
@@ -308,9 +314,21 @@
       "type": "file"
     },
     {
-      "path": "common\\tasks\\watching_data_tasks.py",
+      "path": "common\\extensions.py",
       "accessCount": 1,
-      "lastAccessed": 1774528668553,
+      "lastAccessed": 1774538484699,
+      "type": "file"
+    },
+    {
+      "path": "common\\celery_app.py",
+      "accessCount": 1,
+      "lastAccessed": 1774538516980,
+      "type": "file"
+    },
+    {
+      "path": "celery_worker.py",
+      "accessCount": 1,
+      "lastAccessed": 1774538539426,
       "type": "file"
     }
   ],

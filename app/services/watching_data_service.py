@@ -1,7 +1,6 @@
 from typing import Dict, List
-from flask import current_app
 from datetime import datetime
-from common.extensions import mongo_client
+import common.extensions as extensions
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages, ClientInfo
 from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
@@ -21,8 +20,7 @@ class WatchingDataService:
         video_id = cached_data['video_id']
         video_duration = duration or cached_data.get('duration')
 
-        mongo_db = mongo_client[current_app.config['MONGO_DB_NAME']]
-        watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
+        watching_data_repo = YoutubeWatchingDataRepository(extensions.mongo_db)
 
         #NOTE: upsert_frame이 실시간으로 쌓은 MongoDB 도큐먼트에서 타임라인 데이터를 읽어 통계 계산
         existing = watching_data_repo.find_by_video_view_log_id(video_view_log_id)
@@ -70,7 +68,7 @@ class WatchingDataService:
 
         #NOTE: video_distribution 평균/추천점수 업데이트 (기존 로직 유지)
         #NOTE: watch_frame에서 emotion_counts는 실시간 증가, 여기서는 평균 계산
-        video_dist_repo = VideoDistributionRepository(mongo_db)
+        video_dist_repo = VideoDistributionRepository(extensions.mongo_db)
         WatchingDataService._update_video_distribution(
             video_dist_repo,
             watching_data_repo,
