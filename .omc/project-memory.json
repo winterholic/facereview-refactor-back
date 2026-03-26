@@ -188,6 +188,18 @@
       "type": "file"
     },
     {
+      "path": "app\\services\\home_service.py",
+      "accessCount": 2,
+      "lastAccessed": 1774513117283,
+      "type": "file"
+    },
+    {
+      "path": "common\\utils\\category_rec_alg.py",
+      "accessCount": 2,
+      "lastAccessed": 1774513120794,
+      "type": "file"
+    },
+    {
       "path": "",
       "accessCount": 1,
       "lastAccessed": 1774512316144,
@@ -198,6 +210,18 @@
       "accessCount": 1,
       "lastAccessed": 1774512320816,
       "type": "directory"
+    },
+    {
+      "path": "app\\routes\\home.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513029945,
+      "type": "file"
+    },
+    {
+      "path": "common\\utils\\main_rec_alg.py",
+      "accessCount": 1,
+      "lastAccessed": 1774513064468,
+      "type": "file"
     }
   ],
   "userDirectives": []

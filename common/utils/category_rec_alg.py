@@ -33,10 +33,6 @@ def get_top_videos_by_category_emotion(
             result[category_name] = []
             continue
 
-        if not videos:
-            result[category_name] = []
-            continue
-
         category = videos[0].get('category')
         preferred_emotion = CATEGORY_PREFERRED_EMOTION.get(category, 'neutral')
 

@@ -401,10 +401,11 @@ class HomeService:
             limit=limit
         )
 
-        #NOTE: 감정 데이터 부족으로 추천 결과 없음 → 선호 장르 랜덤 폴백
+        #NOTE: 감정 데이터 부족으로 추천 결과 없음 → 선호 장르 랜덤 폴백, 없으면 전체 풀 폴백
         if not recommended_videos:
             genre_videos = [v for v in all_videos_dict if v.get('category') in favorite_genres]
-            sampled = random.sample(genre_videos, min(limit, len(genre_videos)))
+            candidates = genre_videos if genre_videos else all_videos_dict
+            sampled = random.sample(candidates, min(limit, len(candidates)))
             return [
                 BaseVideoDataDto(
                     video_id=v['video_id'],
