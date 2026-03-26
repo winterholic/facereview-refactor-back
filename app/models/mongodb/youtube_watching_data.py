@@ -180,10 +180,8 @@ class YoutubeWatchingDataRepository:
         most_emotion: str,
         duration: int = None
     ):
-        """
-        watch_frame에서 호출하여 프레임 데이터를 실시간으로 저장합니다.
-        문서가 없으면 생성하고, 있으면 타임라인 데이터를 추가합니다.
-        """
+        from pymongo import ReturnDocument
+
         # NOTE: youtube_running_time이 문자열로 올 수 있으므로 float으로 변환
         running_time_float = float(youtube_running_time)
 
@@ -192,15 +190,16 @@ class YoutubeWatchingDataRepository:
 
         logger.debug(f"upsert_frame: video_view_log_id={video_view_log_id}, original_time={youtube_running_time}, time_key={time_key}")
 
-        emotion_scores = [
-            emotion_percentages.get('neutral', 0.0),
-            emotion_percentages.get('happy', 0.0),
-            emotion_percentages.get('surprise', 0.0),
-            emotion_percentages.get('sad', 0.0),
-            emotion_percentages.get('angry', 0.0)
-        ]
+        neutral = emotion_percentages.get('neutral', 0.0)
+        happy = emotion_percentages.get('happy', 0.0)
+        surprise = emotion_percentages.get('surprise', 0.0)
+        sad = emotion_percentages.get('sad', 0.0)
+        angry = emotion_percentages.get('angry', 0.0)
 
-        self.collection.update_one(
+        emotion_scores = [neutral, happy, surprise, sad, angry]
+
+        #NOTE: 누적 합계($inc)와 타임라인을 한 번에 업데이트하고 최신 문서 반환
+        updated = self.collection.find_one_and_update(
             {'video_view_log_id': video_view_log_id},
             {
                 '$set': {
@@ -223,6 +222,13 @@ class YoutubeWatchingDataRepository:
                         'sad': 0.0,
                         'angry': 0.0
                     },
+                    'emotion_sum': {
+                        'neutral': 0.0,
+                        'happy': 0.0,
+                        'surprise': 0.0,
+                        'sad': 0.0,
+                        'angry': 0.0
+                    },
                     'client_info': {
                         'ip_address': None,
                         'user_agent': None,
@@ -234,11 +240,36 @@ class YoutubeWatchingDataRepository:
                     }
                 },
                 '$inc': {
-                    'frame_count': 1
+                    'frame_count': 1,
+                    'emotion_sum.neutral': neutral,
+                    'emotion_sum.happy': happy,
+                    'emotion_sum.surprise': surprise,
+                    'emotion_sum.sad': sad,
+                    'emotion_sum.angry': angry,
                 }
             },
-            upsert=True
+            upsert=True,
+            return_document=ReturnDocument.AFTER
         )
+
+        #NOTE: 누적 합계로 emotion_percentages와 dominant_emotion 실시간 계산
+        if updated:
+            frame_count = updated.get('frame_count', 1)
+            emotion_sum = updated.get('emotion_sum', {})
+            if frame_count > 0:
+                labels = ['neutral', 'happy', 'surprise', 'sad', 'angry']
+                ep = {
+                    label: round(emotion_sum.get(label, 0.0) / frame_count / 100.0, 3)
+                    for label in labels
+                }
+                dominant = max(ep, key=ep.get)
+                self.collection.update_one(
+                    {'video_view_log_id': video_view_log_id},
+                    {'$set': {
+                        'emotion_percentages': ep,
+                        'dominant_emotion': dominant
+                    }}
+                )
 
     def finalize(self, watching_data: 'YoutubeWatchingData') -> Dict[str, any]:
         from flask import g
