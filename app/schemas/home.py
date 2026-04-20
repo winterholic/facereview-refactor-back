@@ -12,7 +12,8 @@ class SearchVideoRequestSchema(Schema):
         metadata={'description': '페이지 당 개수 (최대 100)'}
     )
     keyword_type = fields.String(
-        required=True,  # 필수 조건
+        required=True,
+        validate=validate.OneOf(['all', 'title', 'channel_name']),
         metadata={'description': '검색어 타입 (all, title, channel_name)'}
     )
     keyword = fields.String(
@@ -64,7 +65,8 @@ class EmotionVideoQuerySchema(Schema):
         metadata={'description': '페이지 당 개수 (최대 100)'}
     )
     emotion = fields.String(
-        required=True,  # 필수 조건
+        required=True,
+        validate=validate.OneOf(['all', 'happy', 'sad', 'neutral', 'surprise', 'angry']),
         metadata={'description': '감정 필터 (all, happy, sad, neutral, surprise, angry)'}
     )
 

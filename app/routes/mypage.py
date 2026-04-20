@@ -5,9 +5,9 @@ from flask_smorest import Blueprint
 from app.schemas.common_schema import SuccessResponseSchema
 from app.schemas.mypage import (
     UpdateProfileRequestSchema,
-    VerifyEmailCodeRequestSchema, VerifyEmailCodeResponseSchema,
+    VerifyEmailCodeRequestSchema,
     VerifyCodeForPasswordResetRequestSchema, VerifyCodeForPasswordResetResponseSchema,
-    ChangePasswordRequestSchema, ChangePasswordResponseSchema,
+    ChangePasswordRequestSchema,
     GetRecentVideosRequestSchema, RecentVideoListResponseSchema,
     EmotionSummaryResponseSchema,
     HighlightResponseSchema,

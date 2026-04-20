@@ -1,16 +1,10 @@
-from datetime import datetime
 from marshmallow import Schema, fields, validate
 from common.enum.youtube_genre import GenreEnum
 
 
 class TimelineEmotionPointSchema(Schema):
-    x = fields.Integer()
-    y = fields.Float()
-
-
-class VideoTimelineSchema(Schema):
-    id = fields.String()
-    data = fields.List(fields.Nested(TimelineEmotionPointSchema))
+    x = fields.Integer(metadata={'description': '시간 인덱스 (0부터 시작)'})
+    y = fields.Float(metadata={'description': '감정 비율 (0.0 ~ 100.0)'})
 
 
 class UpdateProfileRequestSchema(Schema):
@@ -27,17 +21,13 @@ class VerifyEmailCodeRequestSchema(Schema):
     code = fields.String(required=True, validate=validate.Length(equal=6), metadata={'description': '인증번호 (6자리)'})
 
 
-class VerifyEmailCodeResponseSchema(Schema):
-    message = fields.String()
-
-
 class VerifyCodeForPasswordResetRequestSchema(Schema):
     code = fields.String(required=True, validate=validate.Length(equal=6), metadata={'description': '인증번호 (6자리)'})
 
 
 class VerifyCodeForPasswordResetResponseSchema(Schema):
     reset_token = fields.String(metadata={'description': '비밀번호 재설정 토큰 (UUID)'})
-    message = fields.String()
+    message = fields.String(metadata={'description': '안내 메시지'})
 
 
 class ChangePasswordRequestSchema(Schema):
@@ -49,10 +39,6 @@ class ChangePasswordRequestSchema(Schema):
     )
 
 
-class ChangePasswordResponseSchema(Schema):
-    message = fields.String()
-
-
 # ==================== 1.1 최근 시청 ====================
 
 class GetRecentVideosRequestSchema(Schema):
@@ -61,56 +47,82 @@ class GetRecentVideosRequestSchema(Schema):
         validate=validate.OneOf(['all', 'neutral', 'happy', 'surprise', 'sad', 'angry']),
         metadata={'description': '감정 필터 (all 또는 특정 감정)'}
     )
-    page = fields.Integer(load_default=1, validate=validate.Range(min=1))
-    size = fields.Integer(load_default=10, validate=validate.Range(min=1, max=50))
+    page = fields.Integer(
+        load_default=1,
+        validate=validate.Range(min=1),
+        metadata={'description': '페이지 번호 (1부터 시작)'}
+    )
+    size = fields.Integer(
+        load_default=10,
+        validate=validate.Range(min=1, max=50),
+        metadata={'description': '페이지 크기 (1~50)'}
+    )
 
 
 class RecentVideoSchema(Schema):
-    video_id = fields.String()
-    youtube_url = fields.String()
-    title = fields.String()
-    dominant_emotion = fields.String()
-    dominant_emotion_per = fields.Float()
-    watched_at = fields.String()
-    timeline_data = fields.Dict(keys=fields.String(), values=fields.List(fields.Nested(TimelineEmotionPointSchema)))
+    video_id = fields.String(metadata={'description': '영상 UUID'})
+    youtube_url = fields.String(metadata={'description': '유튜브 URL'})
+    title = fields.String(metadata={'description': '영상 제목'})
+    dominant_emotion = fields.String(metadata={'description': '주된 감정 (neutral, happy, surprise, sad, angry)'})
+    dominant_emotion_per = fields.Float(metadata={'description': '주된 감정 비율 (0.0 ~ 100.0)'})
+    watched_at = fields.String(metadata={'description': '시청일시 (ISO 8601)'})
+    timeline_data = fields.Dict(
+        keys=fields.String(),
+        values=fields.List(fields.Nested(TimelineEmotionPointSchema)),
+        metadata={'description': '감정별 타임라인 데이터 (키: 감정명, 값: x/y 포인트 리스트)'}
+    )
 
 
 class RecentVideoListResponseSchema(Schema):
-    videos = fields.List(fields.Nested(RecentVideoSchema))
-    total = fields.Integer()
-    page = fields.Integer()
-    size = fields.Integer()
-    has_next = fields.Boolean()
+    videos = fields.List(fields.Nested(RecentVideoSchema), metadata={'description': '최근 시청 영상 목록'})
+    total = fields.Integer(metadata={'description': '전체 영상 수'})
+    page = fields.Integer(metadata={'description': '현재 페이지'})
+    size = fields.Integer(metadata={'description': '페이지 크기'})
+    has_next = fields.Boolean(metadata={'description': '다음 페이지 존재 여부'})
 
 
 # ==================== 1.2 감정 요약 ====================
 
 class EmotionSummaryResponseSchema(Schema):
-    emotion_percentages = fields.Dict(keys=fields.String(), values=fields.Float())
-    emotion_seconds = fields.Dict(keys=fields.String(), values=fields.Integer())
+    emotion_percentages = fields.Dict(
+        keys=fields.String(),
+        values=fields.Float(),
+        metadata={'description': '감정별 비율 (키: 감정명, 값: 0.0~100.0)'}
+    )
+    emotion_seconds = fields.Dict(
+        keys=fields.String(),
+        values=fields.Integer(),
+        metadata={'description': '감정별 누적 시청 시간 (키: 감정명, 값: 초)'}
+    )
 
 
 # ==================== 1.3 하이라이트 ====================
 
 class EmotionVideoSchema(Schema):
-    emotion = fields.String()
-    video_id = fields.String()
-    youtube_url = fields.String()
-    title = fields.String()
-    emotion_percentage = fields.Float()
+    emotion = fields.String(metadata={'description': '감정 종류'})
+    video_id = fields.String(metadata={'description': '영상 UUID'})
+    youtube_url = fields.String(metadata={'description': '유튜브 URL'})
+    title = fields.String(metadata={'description': '영상 제목'})
+    emotion_percentage = fields.Float(metadata={'description': '해당 감정 비율 (0.0~1.0)'})
 
 
 class CategoryEmotionHighlightSchema(Schema):
-    category = fields.String()
-    dominant_emotion = fields.String()
-    percentage = fields.Float()
+    category = fields.String(metadata={'description': '카테고리명'})
+    dominant_emotion = fields.String(metadata={'description': '카테고리의 대표 감정'})
+    percentage = fields.Float(metadata={'description': '대표 감정 비율 (0.0~100.0)'})
 
 
 class HighlightResponseSchema(Schema):
-    emotion_videos = fields.List(fields.Nested(EmotionVideoSchema))
-    category_emotions = fields.List(fields.Nested(CategoryEmotionHighlightSchema))
-    most_watched_category = fields.String()
-    most_felt_emotion = fields.String()
+    emotion_videos = fields.List(
+        fields.Nested(EmotionVideoSchema),
+        metadata={'description': '감정별 대표 영상 목록 (최대 5개)'}
+    )
+    category_emotions = fields.List(
+        fields.Nested(CategoryEmotionHighlightSchema),
+        metadata={'description': '카테고리별 대표 감정 목록'}
+    )
+    most_watched_category = fields.String(metadata={'description': '가장 많이 시청한 카테고리'})
+    most_felt_emotion = fields.String(metadata={'description': '가장 많이 느낀 감정'})
 
 
 # ==================== 2.1 감정 캘린더 ====================
@@ -136,9 +148,9 @@ class CalendarDaySchema(Schema):
 
 
 class EmotionCalendarResponseSchema(Schema):
-    year = fields.Integer()
-    month = fields.Integer(allow_none=True)
-    data = fields.List(fields.Nested(CalendarDaySchema))
+    year = fields.Integer(metadata={'description': '조회 연도'})
+    month = fields.Integer(allow_none=True, metadata={'description': '조회 월 (전체 조회 시 null)'})
+    data = fields.List(fields.Nested(CalendarDaySchema), metadata={'description': '일자별 감정 데이터'})
 
 
 # ==================== 2.2 베스트 모먼트 ====================
@@ -149,32 +161,40 @@ class GetMomentsRequestSchema(Schema):
         validate=validate.OneOf(['all', 'neutral', 'happy', 'surprise', 'sad', 'angry']),
         metadata={'description': '감정 필터 (all 또는 특정 감정)'}
     )
-    page = fields.Integer(load_default=1, validate=validate.Range(min=1))
-    size = fields.Integer(load_default=10, validate=validate.Range(min=1, max=50))
+    page = fields.Integer(
+        load_default=1,
+        validate=validate.Range(min=1),
+        metadata={'description': '페이지 번호 (1부터 시작)'}
+    )
+    size = fields.Integer(
+        load_default=10,
+        validate=validate.Range(min=1, max=50),
+        metadata={'description': '페이지 크기 (1~50)'}
+    )
 
 
 class MomentSchema(Schema):
-    video_id = fields.String()
-    video_title = fields.String()
-    youtube_url = fields.String()
+    video_id = fields.String(metadata={'description': '영상 UUID'})
+    video_title = fields.String(metadata={'description': '영상 제목'})
+    youtube_url = fields.String(metadata={'description': '유튜브 URL'})
     timestamp_seconds = fields.Float(metadata={'description': '영상 내 타임스탬프 (초)'})
-    emotion = fields.String()
-    emotion_percentage = fields.Float()
-    thumbnail_url = fields.String()
-    watched_at = fields.String()
+    emotion = fields.String(metadata={'description': '감지된 감정'})
+    emotion_percentage = fields.Float(metadata={'description': '감정 강도 (0.0 ~ 100.0)'})
+    thumbnail_url = fields.String(metadata={'description': '썸네일 URL (YouTube hqdefault)'})
+    watched_at = fields.String(metadata={'description': '시청일시 (ISO 8601)'})
 
 
 class MomentListResponseSchema(Schema):
-    moments = fields.List(fields.Nested(MomentSchema))
-    total = fields.Integer()
-    has_next = fields.Boolean()
+    moments = fields.List(fields.Nested(MomentSchema), metadata={'description': '베스트 모먼트 목록'})
+    total = fields.Integer(metadata={'description': '전체 모먼트 수'})
+    has_next = fields.Boolean(metadata={'description': '다음 페이지 존재 여부'})
 
 
 # ==================== 2.3 감정 DNA ====================
 
 class DnaTraitSchema(Schema):
-    trait = fields.String()
-    score = fields.Integer()
+    trait = fields.String(metadata={'description': '특성 이름'})
+    score = fields.Integer(metadata={'description': '특성 점수 (0~100)'})
 
 
 class EmotionDnaResponseSchema(Schema):
