@@ -293,47 +293,38 @@ class MypageService:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
         repo = YoutubeWatchingDataRepository(mongo_db)
-        collection = repo.collection
 
-        watching_data_docs = collection.find({'user_id': user_id})
+        #NOTE: timeline 전체 데이터 대신 저장된 emotion_percentages + timeline 길이만 집계
+        pipeline = [
+            {'$match': {'user_id': user_id}},
+            {'$project': {
+                'emotion_percentages': 1,
+                'timeline_len': {'$size': {'$objectToArray': '$emotion_score_timeline'}},
+                '_id': 0
+            }}
+        ]
+        docs = list(repo.collection.aggregate(pipeline))
 
-        total_seconds = {
-            'neutral': 0,
-            'happy': 0,
-            'surprise': 0,
-            'sad': 0,
-            'angry': 0
-        }
+        total_seconds = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
 
-        for doc in watching_data_docs:
-            emotion_score_timeline = doc.get('emotion_score_timeline', {})
-
-            for ms_key, scores in emotion_score_timeline.items():
-                parsed_scores = _extract_emotion_scores(scores)
-                total_seconds['neutral'] += parsed_scores['neutral'] * 0.1
-                total_seconds['happy'] += parsed_scores['happy'] * 0.1
-                total_seconds['surprise'] += parsed_scores['surprise'] * 0.1
-                total_seconds['sad'] += parsed_scores['sad'] * 0.1
-                total_seconds['angry'] += parsed_scores['angry'] * 0.1
+        for doc in docs:
+            ep = doc.get('emotion_percentages', {})
+            watch_secs = doc.get('timeline_len', 0) / 2
+            for emotion in total_seconds:
+                total_seconds[emotion] += float(ep.get(emotion, 0.0)) * watch_secs
 
         total_time = sum(total_seconds.values())
-
         emotion_percentages = {}
         emotion_seconds = {}
 
         for emotion, seconds in total_seconds.items():
             emotion_seconds[emotion] = int(seconds)
-            if total_time > 0:
-                emotion_percentages[emotion] = round((seconds / total_time) * 100, 1)
-            else:
-                emotion_percentages[emotion] = 0.0
+            emotion_percentages[emotion] = round((seconds / total_time) * 100, 1) if total_time > 0 else 0.0
 
-        result = EmotionSummaryDto(
+        return EmotionSummaryDto(
             emotion_percentages=emotion_percentages,
             emotion_seconds=emotion_seconds
-        )
-
-        return result.to_dict()
+        ).to_dict()
 
     @staticmethod
     @transactional_readonly
@@ -343,117 +334,89 @@ class MypageService:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
         repo = YoutubeWatchingDataRepository(mongo_db)
-        collection = repo.collection
 
-        watching_data_docs = list(collection.find({'user_id': user_id}))
+        #NOTE: timeline 불필요 — emotion_percentages만 projection
+        watching_data_docs = list(repo.collection.find(
+            {'user_id': user_id},
+            {'video_id': 1, 'emotion_percentages': 1, '_id': 0}
+        ))
+
+        if not watching_data_docs:
+            return HighlightDto(
+                emotion_videos=[],
+                category_emotions=[],
+                most_watched_category='none',
+                most_felt_emotion='neutral'
+            ).to_dict()
+
+        #NOTE: video_map 선조회로 N+1 제거
+        video_ids = {doc['video_id'] for doc in watching_data_docs}
+        video_map = {
+            v.video_id: v
+            for v in Video.query.filter(Video.video_id.in_(video_ids), Video.is_deleted == 0).all()
+        }
 
         emotion_videos_map = {}
+        category_emotions_map = {}
+        category_counts = {}
+        total_emotions = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
 
         for doc in watching_data_docs:
             video_id = doc['video_id']
-            emotion_percentages = doc.get('emotion_percentages', {})
+            ep = doc.get('emotion_percentages', {})
 
-            for emotion, percentage in emotion_percentages.items():
+            for emotion, percentage in ep.items():
                 if emotion not in emotion_videos_map or percentage > emotion_videos_map[emotion][1]:
                     emotion_videos_map[emotion] = (video_id, percentage)
 
-        emotion_videos = []
-        for emotion in ['neutral', 'happy', 'surprise', 'sad', 'angry']:
-            if emotion in emotion_videos_map:
-                video_id, percentage = emotion_videos_map[emotion]
-                video = Video.query.filter_by(video_id=video_id, is_deleted=0).first()
-                if video:
-                    emotion_video_dto = EmotionVideoDto(
-                        emotion=emotion,
-                        video_id=video.video_id,
-                        youtube_url=f"https://www.youtube.com/watch?v={video.youtube_url}",
-                        title=video.title,
-                        emotion_percentage=percentage
-                    )
-                    emotion_videos.append(emotion_video_dto)
+            for emotion in total_emotions:
+                total_emotions[emotion] += float(ep.get(emotion, 0.0))
 
-        category_emotions_map = {}
-
-        for doc in watching_data_docs:
-            video_id = doc['video_id']
-            video = Video.query.filter_by(video_id=video_id, is_deleted=0).first()
+            video = video_map.get(video_id)
             if not video:
                 continue
 
             category = video.category.value if hasattr(video.category, 'value') else video.category
             if category not in category_emotions_map:
-                category_emotions_map[category] = {
-                    'neutral': 0,
-                    'happy': 0,
-                    'surprise': 0,
-                    'sad': 0,
-                    'angry': 0
-                }
+                category_emotions_map[category] = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
+            for emotion in category_emotions_map[category]:
+                category_emotions_map[category][emotion] += float(ep.get(emotion, 0.0))
+            category_counts[category] = category_counts.get(category, 0) + 1
 
-            emotion_score_timeline = doc.get('emotion_score_timeline', {})
-            for ms_key, scores in emotion_score_timeline.items():
-                parsed_scores = _extract_emotion_scores(scores)
-                category_emotions_map[category]['neutral'] += parsed_scores['neutral']
-                category_emotions_map[category]['happy'] += parsed_scores['happy']
-                category_emotions_map[category]['surprise'] += parsed_scores['surprise']
-                category_emotions_map[category]['sad'] += parsed_scores['sad']
-                category_emotions_map[category]['angry'] += parsed_scores['angry']
+        emotion_videos = []
+        for emotion in ['neutral', 'happy', 'surprise', 'sad', 'angry']:
+            if emotion in emotion_videos_map:
+                video_id, percentage = emotion_videos_map[emotion]
+                video = video_map.get(video_id)
+                if video:
+                    emotion_videos.append(EmotionVideoDto(
+                        emotion=emotion,
+                        video_id=video.video_id,
+                        youtube_url=f"https://www.youtube.com/watch?v={video.youtube_url}",
+                        title=video.title,
+                        emotion_percentage=percentage
+                    ))
 
         category_emotions = []
         for category, emotions in category_emotions_map.items():
             total = sum(emotions.values())
-
             dominant_emotion = max(emotions, key=emotions.get)
-            if total > 0:
-                percentage = round((emotions[dominant_emotion] / total) * 100, 1)
-            else:
-                percentage = 0.0
-
-            category_emotion_dto = CategoryEmotionHighlightDto(
+            percentage = round((emotions[dominant_emotion] / total) * 100, 1) if total > 0 else 0.0
+            category_emotions.append(CategoryEmotionHighlightDto(
                 category=category,
                 dominant_emotion=dominant_emotion,
                 percentage=percentage
-            )
-            category_emotions.append(category_emotion_dto)
-
-        category_counts = {}
-        for doc in watching_data_docs:
-            video_id = doc['video_id']
-            video = Video.query.filter_by(video_id=video_id, is_deleted=0).first()
-            if video:
-                category = video.category.value if hasattr(video.category, 'value') else video.category
-                category_counts[category] = category_counts.get(category, 0) + 1
+            ))
 
         most_watched_category = max(category_counts, key=category_counts.get) if category_counts else 'none'
-
-        total_emotions = {
-            'neutral': 0,
-            'happy': 0,
-            'surprise': 0,
-            'sad': 0,
-            'angry': 0
-        }
-
-        for doc in watching_data_docs:
-            emotion_score_timeline = doc.get('emotion_score_timeline', {})
-            for ms_key, scores in emotion_score_timeline.items():
-                parsed_scores = _extract_emotion_scores(scores)
-                total_emotions['neutral'] += parsed_scores['neutral']
-                total_emotions['happy'] += parsed_scores['happy']
-                total_emotions['surprise'] += parsed_scores['surprise']
-                total_emotions['sad'] += parsed_scores['sad']
-                total_emotions['angry'] += parsed_scores['angry']
-
         most_felt_emotion = max(total_emotions, key=total_emotions.get) if any(total_emotions.values()) else 'neutral'
 
-        result = HighlightDto(
+        return HighlightDto(
             emotion_videos=emotion_videos,
             category_emotions=category_emotions,
             most_watched_category=most_watched_category,
             most_felt_emotion=most_felt_emotion
-        )
-
-        return result.to_dict()
+        ).to_dict()
 
     @staticmethod
     @transactional_readonly
