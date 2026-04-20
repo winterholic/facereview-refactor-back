@@ -335,11 +335,11 @@ class MypageService:
 
         repo = YoutubeWatchingDataRepository(mongo_db)
 
-        #NOTE: timeline 불필요 — emotion_percentages만 projection
+        #NOTE: timeline 불필요 — emotion_percentages만 projection, 최근 500개로 제한
         watching_data_docs = list(repo.collection.find(
             {'user_id': user_id},
             {'video_id': 1, 'emotion_percentages': 1, '_id': 0}
-        ))
+        ).sort('created_at', -1).limit(500))
 
         if not watching_data_docs:
             return HighlightDto(

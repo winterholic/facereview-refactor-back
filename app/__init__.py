@@ -133,6 +133,10 @@ def create_app(config_name='default'):
         extensions.mongo_db = mongo_connection[app.config['MONGO_DB_NAME']]
         app.mongo = mongo_connection[app.config['MONGO_DB_NAME']]
 
+        from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
+        YoutubeWatchingDataRepository.ensure_indexes(extensions.mongo_db)
+        logger.info("MongoDB 인덱스 초기화 완료")
+
     except Exception as e:
         logger.error(f"MongoDB 연결 실패: {e}")
         logger.error(f"MongoDB URI (마스킹): mongodb://{mongo_host}:{mongo_port}/")

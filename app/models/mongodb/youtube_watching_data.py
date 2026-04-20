@@ -113,10 +113,13 @@ class YoutubeWatchingDataRepository:
 
     def __init__(self, db):
         self.collection = db[self.COLLECTION_NAME]
-        # 인덱스 생성
-        self.collection.create_index([('user_id', 1), ('created_at', -1)])
-        self.collection.create_index([('video_id', 1), ('created_at', -1)])
-        self.collection.create_index('video_view_log_id', unique=True)
+
+    @classmethod
+    def ensure_indexes(cls, db):
+        collection = db[cls.COLLECTION_NAME]
+        collection.create_index([('user_id', 1), ('created_at', -1)])
+        collection.create_index([('video_id', 1), ('created_at', -1)])
+        collection.create_index('video_view_log_id', unique=True)
 
     def insert(self, watching_data: YoutubeWatchingData) -> Dict[str, any]:
         from flask import g
