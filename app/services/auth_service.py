@@ -4,7 +4,6 @@ import datetime
 from app.dto.auth import AuthTokenDto, UserBaseDataDto
 from app.models import UserFavoriteGenre
 from app.models.user import User
-from app.schemas.auth import LoginResponseSchema
 from common.decorator.db_decorators import transactional, transactional_readonly
 from common.enum.error_code import APIError
 from common.enum.youtube_genre import GenreEnum
