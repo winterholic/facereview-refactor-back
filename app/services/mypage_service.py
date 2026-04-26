@@ -193,7 +193,7 @@ class MypageService:
             if not video:
                 continue
 
-            timeline_data = MypageService._compress_timeline(doc.get('emotion_score_timeline', {}))
+            timeline_data = MypageService._compress_timeline(doc.get('emotion_score_timeline', {}), video.duration)
 
             emotion_percentages = doc.get('emotion_percentages', {})
             dominant_emotion = doc.get('dominant_emotion', 'neutral')
@@ -221,69 +221,37 @@ class MypageService:
         return result.to_dict()
 
     @staticmethod
-    def _compress_timeline(emotion_score_timeline: Dict[str, list]) -> List[VideoTimelineDto]:
-        if not emotion_score_timeline:
-            return []
+    def _compress_timeline(emotion_score_timeline: Dict[str, list], duration: int) -> Dict:
+        if not emotion_score_timeline or not duration:
+            return {}
 
-        emotion_lists = {
-            'neutral': [],
-            'happy': [],
-            'surprise': [],
-            'sad': [],
-            'angry': []
-        }
+        N_BUCKETS = 40
+        total_cs = duration * 100
+        bucket_size = total_cs / N_BUCKETS
+        emotion_order = ['neutral', 'happy', 'surprise', 'sad', 'angry']
 
-        #NOTE: 키가 숫자로 변환 가능한 것만 필터링 (centisecond 정수 "2029" 및 초 소수점 "20.29" 모두 허용)
-        valid_keys = []
-        for key in emotion_score_timeline.keys():
+        bucket_sums = [[0.0] * 5 for _ in range(N_BUCKETS)]
+        bucket_counts = [0] * N_BUCKETS
+
+        for key, scores in emotion_score_timeline.items():
             try:
-                float(key)
-                valid_keys.append(key)
+                cs = float(key)
             except (ValueError, TypeError):
                 continue
+            bucket_idx = min(int(cs / bucket_size), N_BUCKETS - 1)
+            extracted = _extract_emotion_scores(scores)
+            for i, emotion in enumerate(emotion_order):
+                bucket_sums[bucket_idx][i] += extracted[emotion]
+            bucket_counts[bucket_idx] += 1
 
-        sorted_keys = sorted(valid_keys, key=lambda x: float(x))
+        result = {emotion: [] for emotion in emotion_order}
+        for x in range(N_BUCKETS):
+            count = bucket_counts[x]
+            for i, emotion in enumerate(emotion_order):
+                y = round(bucket_sums[x][i] / count, 1) if count > 0 else 0.0
+                result[emotion].append({'x': x + 1, 'y': y})
 
-        for idx, ms_key in enumerate(sorted_keys):
-            scores = _extract_emotion_scores(emotion_score_timeline[ms_key])
-            emotion_lists['neutral'].append({'x': idx, 'y': scores['neutral']})
-            emotion_lists['happy'].append({'x': idx, 'y': scores['happy']})
-            emotion_lists['surprise'].append({'x': idx, 'y': scores['surprise']})
-            emotion_lists['sad'].append({'x': idx, 'y': scores['sad']})
-            emotion_lists['angry'].append({'x': idx, 'y': scores['angry']})
-
-        data_num = len(sorted_keys)
-
-        #NOTE: 압축 로직 (40개 이하로)
-        if data_num > 40:
-            parameter = round(data_num / 40, 0)
-
-            compressed_lists = {}
-            for emotion_name, emotion_list in emotion_lists.items():
-                compressed = []
-                temp_sum = 0
-                temp_count = 0
-                temp_index = 1
-
-                for idx, point in enumerate(emotion_list):
-                    temp_sum += point['y']
-                    temp_count += 1
-
-                    if temp_count == parameter or idx == len(emotion_list) - 1:
-                        temp_data = round(temp_sum / temp_count, 1)
-                        compressed.append({'x': temp_index, 'y': temp_data})
-                        temp_sum = 0
-                        temp_count = 0
-                        temp_index += 1
-
-                compressed_lists[emotion_name] = compressed
-        else:
-            compressed_lists = emotion_lists
-
-        return {
-            emotion_name: [{'x': p['x'], 'y': p['y']} for p in points]
-            for emotion_name, points in compressed_lists.items()
-        }
+        return result
 
     @staticmethod
     @transactional_readonly
@@ -294,17 +262,22 @@ class MypageService:
 
         repo = YoutubeWatchingDataRepository(mongo_db)
 
-        #NOTE: frame_count는 upsert_frame 시 $inc로 적재된 값. $objectToArray 없이 단순 필드 조회
-        docs = list(repo.collection.find(
-            {'user_id': user_id},
-            {'emotion_percentages': 1, 'frame_count': 1, '_id': 0}
-        ))
+        #NOTE: timeline 전체 데이터 대신 저장된 emotion_percentages + timeline 길이만 집계
+        pipeline = [
+            {'$match': {'user_id': user_id}},
+            {'$project': {
+                'emotion_percentages': 1,
+                'timeline_len': {'$size': {'$objectToArray': '$emotion_score_timeline'}},
+                '_id': 0
+            }}
+        ]
+        docs = list(repo.collection.aggregate(pipeline))
 
         total_seconds = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
 
         for doc in docs:
             ep = doc.get('emotion_percentages', {})
-            watch_secs = doc.get('frame_count', 0) / 2
+            watch_secs = doc.get('timeline_len', 0) / 2
             for emotion in total_seconds:
                 total_seconds[emotion] += float(ep.get(emotion, 0.0)) * watch_secs
 

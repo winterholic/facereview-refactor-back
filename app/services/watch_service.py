@@ -96,46 +96,32 @@ class WatchService:
         if not counts_per_key:
             return WatchService._get_default_timeline_data()
 
+        #NOTE: 영상 전체 길이 기준으로 100개 버킷 분할 — 데이터 없는 구간은 0으로 채움
+        N_BUCKETS = 100
+        total_cs = (duration or 1) * 100
+        bucket_size = total_cs / N_BUCKETS
         emotion_order = ['neutral', 'happy', 'surprise', 'sad', 'angry']
-        emotion_lists = {'neutral': [], 'happy': [], 'surprise': [], 'sad': [], 'angry': []}
 
-        sorted_keys = sorted(counts_per_key.keys(), key=lambda k: float(k))
+        bucket_sums = [[0.0] * 5 for _ in range(N_BUCKETS)]
+        bucket_counts = [0] * N_BUCKETS
 
-        for time_key in sorted_keys:
-            count = counts_per_key[time_key]
+        for time_key, session_count in counts_per_key.items():
+            try:
+                cs = float(time_key)
+            except (ValueError, TypeError):
+                continue
+            bucket_idx = min(int(cs / bucket_size), N_BUCKETS - 1)
             sums = emotion_sums[time_key]
+            for i in range(5):
+                bucket_sums[bucket_idx][i] += sums[i] / session_count
+            bucket_counts[bucket_idx] += 1
+
+        compressed_lists = {emotion: [] for emotion in emotion_order}
+        for x in range(N_BUCKETS):
+            count = bucket_counts[x]
             for i, emotion in enumerate(emotion_order):
-                emotion_lists[emotion].append(round(sums[i] / count, 2))
-
-        data_count = len(sorted_keys)
-
-        #NOTE: 100개 이상이면 압축 (최대한 100개 정도의 데이터 포인트로 압축)
-        if data_count > 100:
-            compressed_lists = {}
-            parameter = max(1, round(data_count / 100))
-
-            for emotion, values in emotion_lists.items():
-                compressed = []
-                temp_sum = 0
-                temp_count = 0
-                temp_index = 1
-
-                for idx, value in enumerate(values):
-                    temp_sum += value
-                    temp_count += 1
-
-                    if temp_count == parameter or idx == len(values) - 1:
-                        compressed.append(TimelinePointDto(x=temp_index, y=round(temp_sum / temp_count, 1)))
-                        temp_sum = 0
-                        temp_count = 0
-                        temp_index += 1
-
-                compressed_lists[emotion] = compressed
-        else:
-            compressed_lists = {
-                emotion: [TimelinePointDto(x=idx + 1, y=val) for idx, val in enumerate(values)]
-                for emotion, values in emotion_lists.items()
-            }
+                y = round(bucket_sums[x][i] / count, 1) if count > 0 else 0.0
+                compressed_lists[emotion].append(TimelinePointDto(x=x + 1, y=y))
 
         return TimelineDataDto(
             happy=compressed_lists['happy'],
