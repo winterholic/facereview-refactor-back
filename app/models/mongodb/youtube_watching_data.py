@@ -280,14 +280,14 @@ class YoutubeWatchingDataRepository:
                     'most_emotion_timeline': watching_data.most_emotion_timeline,
                     'emotion_score_timeline': watching_data.emotion_score_timeline,
                     'client_info': watching_data.client_info.to_dict(),
-                    'updated_at': datetime.utcnow()
+                    'updated_at': datetime.utcnow(),
+                    'frame_count': len(watching_data.emotion_score_timeline),
                 },
                 '$setOnInsert': {
                     'user_id': watching_data.user_id,
                     'video_id': watching_data.video_id,
                     'video_view_log_id': watching_data.video_view_log_id,
                     'created_at': watching_data.created_at,
-                    'frame_count': 0
                 }
             },
             upsert=True
