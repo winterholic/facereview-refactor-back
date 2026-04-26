@@ -294,22 +294,17 @@ class MypageService:
 
         repo = YoutubeWatchingDataRepository(mongo_db)
 
-        #NOTE: timeline 전체 데이터 대신 저장된 emotion_percentages + timeline 길이만 집계
-        pipeline = [
-            {'$match': {'user_id': user_id}},
-            {'$project': {
-                'emotion_percentages': 1,
-                'timeline_len': {'$size': {'$objectToArray': '$emotion_score_timeline'}},
-                '_id': 0
-            }}
-        ]
-        docs = list(repo.collection.aggregate(pipeline))
+        #NOTE: frame_count는 upsert_frame 시 $inc로 적재된 값. $objectToArray 없이 단순 필드 조회
+        docs = list(repo.collection.find(
+            {'user_id': user_id},
+            {'emotion_percentages': 1, 'frame_count': 1, '_id': 0}
+        ))
 
         total_seconds = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
 
         for doc in docs:
             ep = doc.get('emotion_percentages', {})
-            watch_secs = doc.get('timeline_len', 0) / 2
+            watch_secs = doc.get('frame_count', 0) / 2
             for emotion in total_seconds:
                 total_seconds[emotion] += float(ep.get(emotion, 0.0)) * watch_secs
 

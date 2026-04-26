@@ -182,27 +182,33 @@
   },
   "hotPaths": [
     {
+      "path": "app\\services\\mypage_service.py",
+      "accessCount": 17,
+      "lastAccessed": 1776697151696,
+      "type": "file"
+    },
+    {
       "path": "app\\services\\watching_data_service.py",
       "accessCount": 16,
       "lastAccessed": 1774538690732,
       "type": "file"
     },
     {
-      "path": "app\\services\\mypage_service.py",
-      "accessCount": 12,
-      "lastAccessed": 1774521883208,
-      "type": "file"
-    },
-    {
       "path": "app\\models\\mongodb\\youtube_watching_data.py",
-      "accessCount": 11,
-      "lastAccessed": 1774542089001,
+      "accessCount": 13,
+      "lastAccessed": 1776697135246,
       "type": "file"
     },
     {
       "path": "app\\sockets\\video_watching_socket.py",
       "accessCount": 9,
       "lastAccessed": 1774538399224,
+      "type": "file"
+    },
+    {
+      "path": "app\\__init__.py",
+      "accessCount": 8,
+      "lastAccessed": 1776697144426,
       "type": "file"
     },
     {
@@ -216,12 +222,6 @@
       "accessCount": 4,
       "lastAccessed": 1774538510979,
       "type": "directory"
-    },
-    {
-      "path": "app\\__init__.py",
-      "accessCount": 4,
-      "lastAccessed": 1774538516748,
-      "type": "file"
     },
     {
       "path": "app\\services\\home_service.py",
@@ -254,6 +254,18 @@
       "type": "file"
     },
     {
+      "path": "app\\routes\\mypage.py",
+      "accessCount": 2,
+      "lastAccessed": 1776693561573,
+      "type": "file"
+    },
+    {
+      "path": "common\\extensions.py",
+      "accessCount": 2,
+      "lastAccessed": 1776697087112,
+      "type": "file"
+    },
+    {
       "path": "app\\routes\\home.py",
       "accessCount": 1,
       "lastAccessed": 1774513029945,
@@ -263,12 +275,6 @@
       "path": "common\\utils\\main_rec_alg.py",
       "accessCount": 1,
       "lastAccessed": 1774513064468,
-      "type": "file"
-    },
-    {
-      "path": "app\\routes\\mypage.py",
-      "accessCount": 1,
-      "lastAccessed": 1774513455409,
       "type": "file"
     },
     {
@@ -311,12 +317,6 @@
       "path": "common\\cache\\watching_data_cache.py",
       "accessCount": 1,
       "lastAccessed": 1774528668184,
-      "type": "file"
-    },
-    {
-      "path": "common\\extensions.py",
-      "accessCount": 1,
-      "lastAccessed": 1774538484699,
       "type": "file"
     },
     {

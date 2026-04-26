@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd F:/mydevelop/new-facereview && git diff app/schemas/auth.py app/schemas/home.py app/schemas/mypage.py app/routes/mypage.py --stat\"}",
+  "error": "Exit code 128\nfatal: option '--stat' must come before non-option arguments",
+  "timestamp": "2026-04-20T13:10:34.048Z",
+  "retry_count": 1
+}
