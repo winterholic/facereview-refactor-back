@@ -13,7 +13,7 @@ env:
 
   # ── Infisical (셀프호스팅) ──
   INFISICAL_DOMAIN: https://secrets.winterholic.net
-  INFISICAL_PROJECT_ID: ""          # ⚠️ TODO: winterholic 프로젝트 ID 입력 (Infisical → Project → Settings)
+  INFISICAL_PROJECT_ID: d113ce3f-417f-4fee-ba43-bfdfd7ad826e   # winterholic 프로젝트 (공용)
   INFISICAL_ENV: prod
   INFISICAL_PATH: /facereview
   INFISICAL_BIN: infisical           # cicd PATH에 없으면 절대경로로 (예: /home/winterholic/bin/infisical)
