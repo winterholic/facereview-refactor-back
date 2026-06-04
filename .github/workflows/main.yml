@@ -16,7 +16,7 @@ env:
   INFISICAL_PROJECT_ID: d113ce3f-417f-4fee-ba43-bfdfd7ad826e   # winterholic 프로젝트 (공용)
   INFISICAL_ENV: prod
   INFISICAL_PATH: /facereview
-  INFISICAL_BIN: infisical           # cicd PATH에 없으면 절대경로로 (예: /home/winterholic/bin/infisical)
+  INFISICAL_BIN: /home/winterholic/bin/infisical   # cicd PATH에 없어 절대경로 지정 (실행 권한 확인됨, v0.43.89)
 
 jobs:
   test:
