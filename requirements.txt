@@ -56,5 +56,3 @@ celery==5.3.6
 
 # Message Queue (Kafka)
 kafka-python==2.0.2
-
-sentry-sdk==2.44.0

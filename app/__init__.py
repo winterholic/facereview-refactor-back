@@ -10,11 +10,6 @@ from pymongo import MongoClient
 from sqlalchemy.engine import URL
 import redis
 import logging
-import sentry_sdk
-from sentry_sdk.integrations.flask import FlaskIntegration
-from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
-from sentry_sdk.integrations.redis import RedisIntegration
-from sentry_sdk.integrations.celery import CeleryIntegration
 from common.extensions import db, socketio, api, celery
 import common.extensions as extensions
 from common.celery_app import create_celery_app
@@ -32,22 +27,6 @@ def create_app(config_name='default'):
     app.config.from_object(config_class)
 
     app.json.ensure_ascii = False
-
-    if app.config.get('SENTRY_DSN'):
-        sentry_sdk.init(
-            dsn=app.config['SENTRY_DSN'],
-            integrations=[
-                FlaskIntegration(),
-                SqlalchemyIntegration(),
-                RedisIntegration(),
-                CeleryIntegration(),
-            ],
-            environment=app.config.get('SENTRY_ENVIRONMENT', 'development'),
-            traces_sample_rate=app.config.get('SENTRY_TRACES_SAMPLE_RATE', 1.0),
-            send_default_pii=False,
-            attach_stacktrace=True,
-            before_send=lambda event, hint: event if app.config.get('FLASK_ENV') != 'development' or app.config.get('SENTRY_DSN') else None,
-        )
 
     log_level = getattr(logging, app.config.get('LOG_LEVEL', 'INFO'))
     logger = setup_logger(app, log_level)

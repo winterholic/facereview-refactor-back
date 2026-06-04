@@ -10,23 +10,8 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
-import sentry_sdk
-from sentry_sdk.integrations.logging import LoggingIntegration
 
 load_dotenv()
-
-sentry_dsn = os.getenv('SENTRY_DSN')
-if sentry_dsn:
-    sentry_sdk.init(
-        dsn=sentry_dsn,
-        environment=os.getenv('SENTRY_ENVIRONMENT', 'development'),
-        traces_sample_rate=float(os.getenv('SENTRY_TRACES_SAMPLE_RATE', '1.0')),
-        integrations=[
-            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
-        ],
-        send_default_pii=False,
-        attach_stacktrace=True,
-    )
 
 logging.basicConfig(
     level=logging.INFO,
