@@ -1,4 +1,4 @@
-name: CI/CD - Build, Test & Deploy
+name: CI/CD - Build & Deploy
 
 on:
   push:
@@ -6,157 +6,146 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.10'
-  APP_NAME: facereview
-  DEPLOY_PATH: /home/winterholic/projects/services/new-facereview
+  IMAGE: ghcr.io/winterholic/facereview-refactor-back
+
+  # ── 서버 배포 경로 (cicd 계정이 쓰기 가능한 /srv 컨벤션) ──
+  DEPLOY_PATH: /srv/facereview
+
+  # ── Infisical (셀프호스팅) ──
+  INFISICAL_DOMAIN: https://secrets.winterholic.net
+  INFISICAL_PROJECT_ID: ""          # ⚠️ TODO: winterholic 프로젝트 ID 입력 (Infisical → Project → Settings)
+  INFISICAL_ENV: prod
+  INFISICAL_PATH: /facereview
+  INFISICAL_BIN: infisical           # cicd PATH에 없으면 절대경로로 (예: /home/winterholic/bin/infisical)
 
 jobs:
   test:
-    name: Run Tests
+    name: Lint
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: pip
+      - name: Flake8 (syntax/undefined only, non-blocking)
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8
+          flake8 app/ common/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        continue-on-error: true
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-        cache: 'pip'
-
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install pytest pytest-cov flake8
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-
-    - name: Run Flake8
-      run: |
-        flake8 app/ common/ --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 app/ common/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-      continue-on-error: true
-
-    - name: Run tests
-      run: |
-        if [ -d "tests" ] && [ "$(ls -A tests 2>/dev/null)" ]; then
-          pytest tests/ -v --cov=app --cov-report=term
-        else
-          echo "No tests found. Skipping test execution."
-        fi
-      continue-on-error: true
-
-  deploy:
-    name: Deploy to Production
+  build:
+    name: Build & Push (GHCR)
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Create .env file
-      run: |
-        cat > .env << EOF
-        FLASK_APP=${{ secrets.FLASK_APP }}
-        FLASK_ENV=${{ secrets.FLASK_ENV }}
-        SECRET_KEY=${{ secrets.SECRET_KEY }}
+      - name: Compute image tag
+        id: meta
+        run: echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-        DB_USERNAME=${{ secrets.DB_USERNAME }}
-        DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-        DB_HOST=${{ secrets.DB_HOST }}
-        DB_PORT=${{ secrets.DB_PORT }}
-        DB_NAME=${{ secrets.DB_NAME }}
+      - uses: docker/setup-buildx-action@v3
 
-        MONGO_HOST=${{ secrets.MONGO_HOST }}
-        MONGO_PORT=${{ secrets.MONGO_PORT }}
-        MONGO_DB_NAME=${{ secrets.MONGO_DB_NAME }}
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-        JWT_SECRET_KEY=${{ secrets.JWT_SECRET_KEY }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-        REDIS_HOST=${{ secrets.REDIS_HOST }}
-        REDIS_PORT=${{ secrets.REDIS_PORT }}
-        REDIS_DB=${{ secrets.REDIS_DB }}
-        REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+  deploy:
+    name: Deploy (server pull + Infisical)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
 
-        YOUTUBE_API_KEY=${{ secrets.YOUTUBE_API_KEY }}
+      - name: Copy compose file to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          source: docker-compose.yml
+          target: ${{ env.DEPLOY_PATH }}
+          overwrite: true
 
-        SMTP_SERVER=${{ secrets.SMTP_SERVER }}
-        SMTP_PORT=${{ secrets.SMTP_PORT }}
-        SMTP_USERNAME=${{ secrets.SMTP_USERNAME }}
-        SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-        SMTP_FROM_EMAIL=${{ secrets.SMTP_FROM_EMAIL }}
+      - name: Deploy on server
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          IMAGE_TAG: ${{ needs.build.outputs.tag }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_PATH: ${{ env.DEPLOY_PATH }}
+          INFISICAL_DOMAIN: ${{ env.INFISICAL_DOMAIN }}
+          INFISICAL_PROJECT_ID: ${{ env.INFISICAL_PROJECT_ID }}
+          INFISICAL_ENV: ${{ env.INFISICAL_ENV }}
+          INFISICAL_PATH: ${{ env.INFISICAL_PATH }}
+          INFISICAL_BIN: ${{ env.INFISICAL_BIN }}
+          INFISICAL_CLIENT_ID: ${{ secrets.INFISICAL_CLIENT_ID }}
+          INFISICAL_CLIENT_SECRET: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: ${{ secrets.SERVER_PORT }}
+          envs: IMAGE_TAG,GHCR_USER,GHCR_TOKEN,DEPLOY_PATH,INFISICAL_DOMAIN,INFISICAL_PROJECT_ID,INFISICAL_ENV,INFISICAL_PATH,INFISICAL_BIN,INFISICAL_CLIENT_ID,INFISICAL_CLIENT_SECRET
+          script: |
+            set -eu
+            cd "$DEPLOY_PATH"
 
-        LOG_LEVEL=INFO
-        EOF
+            echo "🔐 GHCR 로그인..."
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-    - name: Copy files to server
-      uses: appleboy/scp-action@v0.1.7
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
-        source: "."
-        target: ${{ env.DEPLOY_PATH }}
-        rm: false
-        overwrite: true
+            echo "🔑 Infisical 인증 (Machine Identity / Universal Auth)..."
+            INFISICAL_TOKEN=$("$INFISICAL_BIN" login --method=universal-auth \
+              --client-id="$INFISICAL_CLIENT_ID" --client-secret="$INFISICAL_CLIENT_SECRET" \
+              --domain="$INFISICAL_DOMAIN/api" --plain --silent)
+            export INFISICAL_TOKEN
 
-    - name: Deploy with Docker Compose
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
-        script: |
-          echo "🚀 Starting deployment..."
+            echo "📝 런타임 시크릿 .env 생성 ($INFISICAL_ENV : $INFISICAL_PATH)..."
+            umask 077
+            "$INFISICAL_BIN" export --token="$INFISICAL_TOKEN" --domain="$INFISICAL_DOMAIN/api" \
+              --projectId="$INFISICAL_PROJECT_ID" --env="$INFISICAL_ENV" --path="$INFISICAL_PATH" \
+              --format=dotenv > .env
 
-          cd ${{ env.DEPLOY_PATH }}
+            echo "📦 이미지 pull & 기동 (tag: ${IMAGE_TAG:-latest})..."
+            export IMAGE_TAG
+            docker compose pull
+            docker compose up -d --remove-orphans
 
-          mkdir -p logs uploads
+            echo "🧹 GHCR 로그아웃 + dangling 이미지 정리..."
+            docker logout ghcr.io
+            docker image prune -f
 
-          # 모델 파일 복사 (git에 포함되지 않은 파일)
-          cp /home/winterholic/projects/services/new-facereview-model/model.h5 ${{ env.DEPLOY_PATH }}/common/ml/model.h5
+            echo "🔍 헬스체크..."
+            for i in $(seq 1 30); do
+              code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo 000)
+              if [ "$code" = "200" ]; then echo "✅ health OK ($code)"; break; fi
+              if [ "$i" = "30" ]; then echo "❌ health 실패"; docker compose logs --tail=50 app; exit 1; fi
+              sleep 2
+            done
 
-          chmod +x scripts/deploy.sh
-
-          ./scripts/deploy.sh
-
-          echo "✅ Deployment completed!"
-
-    - name: Verify deployment
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
-        script: |
-          cd ${{ env.DEPLOY_PATH }}
-
-          echo "📊 Checking service status..."
-          docker compose ps
-
-          echo ""
-          echo "🔍 Checking app health..."
-          sleep 10
-          curl -f http://localhost:5000/health || echo "⚠️ Health check failed"
-
-          echo ""
-          echo "📝 Recent logs:"
-          docker compose logs --tail=20 app
-
-    - name: Cleanup old resources
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
-        script: |
-          echo "🧹 Cleaning up old Docker resources..."
-          docker image prune -f
-          echo "✅ Cleanup completed"
-      continue-on-error: true
+            docker compose ps

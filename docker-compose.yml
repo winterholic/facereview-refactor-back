@@ -1,9 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: facereview-app:latest
+    image: ghcr.io/winterholic/facereview-refactor-back:${IMAGE_TAG:-latest}
     container_name: facereview-app
     restart: unless-stopped
     network_mode: host
@@ -14,15 +11,17 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./uploads:/app/uploads
-    # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 40s
+      # model.h5는 git/이미지에 없음 → 호스트 파일을 마운트 (서버에 scp로 올려둘 것)
+      - ${MODEL_PATH:-/srv/facereview/model/model.h5}:/app/common/ml/model.h5:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   celery-worker:
-    image: facereview-app:latest
+    image: ghcr.io/winterholic/facereview-refactor-back:${IMAGE_TAG:-latest}
     container_name: facereview-celery-worker
     restart: unless-stopped
     network_mode: host
@@ -30,6 +29,8 @@ services:
       - .env
     environment:
       - FLASK_ENV=production
+    # 이미지 ENTRYPOINT가 gunicorn 고정이라 비워야 아래 command(celery)가 실제로 실행됨
+    entrypoint: []
     command: celery -A common.celery_app.celery_app worker --loglevel=info
     volumes:
       - ./logs:/app/logs
