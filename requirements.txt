@@ -53,6 +53,3 @@ apispec==6.6.1
 
 # Async Task Queue
 celery==5.3.6
-
-# Message Queue (Kafka)
-kafka-python==2.0.2

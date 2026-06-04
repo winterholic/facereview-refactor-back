@@ -36,12 +36,6 @@ class Config:
     REDIS_PASSWORD = os.getenv('REDIS_PASSWORD')
     REDIS_URL = os.getenv('REDIS_URL')
 
-    KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    KAFKA_CLIENT_ID = os.getenv("KAFKA_CLIENT_ID", "facereview-api")
-    KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "facereview-consumer")
-    KAFKA_TOPIC_USER_EVENT = os.getenv("KAFKA_TOPIC_USER_EVENT", "user-event")
-    KAFKA_TOPIC_WATCH_FRAME = os.getenv("KAFKA_TOPIC_WATCH_FRAME", "watch-frame-event")
-
     SOCKETIO_MESSAGE_QUEUE = os.getenv('SOCKETIO_MESSAGE_QUEUE')
 
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024

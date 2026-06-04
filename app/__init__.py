@@ -167,13 +167,6 @@ def create_app(config_name='default'):
         logger.exception("상세 오류 정보:")
         extensions.redis_client = None
 
-    from common.utils.kafka_producer import FacereviewKafkaProducer
-    kafka_producer_instance = FacereviewKafkaProducer(
-        bootstrap_servers=app.config.get('KAFKA_BOOTSTRAP_SERVERS'),
-        client_id=app.config.get('KAFKA_CLIENT_ID')
-    )
-    extensions.kafka_producer = kafka_producer_instance
-
     from common.scheduler import init_scheduler
     init_scheduler(app)
 

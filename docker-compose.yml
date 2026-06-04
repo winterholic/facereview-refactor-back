@@ -36,19 +36,3 @@ services:
     depends_on:
       app:
         condition: service_healthy
-
-  kafka-consumer:
-    image: facereview-app:latest
-    container_name: facereview-kafka-consumer
-    restart: unless-stopped
-    network_mode: host
-    env_file:
-      - .env
-    environment:
-      - FLASK_ENV=production
-    command: python run_kafka_consumer.py
-    volumes:
-      - ./logs:/app/logs
-    depends_on:
-      app:
-        condition: service_healthy

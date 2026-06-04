@@ -12,7 +12,7 @@ YouTube 영상 시청 중 웹캠으로 감정을 실시간 분석하고, 감정 
 - **RDB**: MySQL (SQLAlchemy ORM)
 - **NoSQL**: MongoDB (pymongo, 시청 데이터·감정 분포)
 - **캐시/메시지큐**: Redis (세션·블랙리스트·메트릭)
-- **비동기 작업**: Celery (Kafka 소비 처리)
+- **비동기 작업**: Celery
 - **스케줄러**: APScheduler (YouTube 데이터 수집)
 - **ML**: TensorFlow/Keras (model.h5 — 얼굴 감정 분류)
 - **인프라**: Docker, Gunicorn, Cloudflare (HTTPS 처리)
@@ -146,5 +146,4 @@ common/
 ```bash
 python run.py                    # Flask 개발 서버 (SocketIO 포함)
 python celery_worker.py          # Celery 워커
-python run_kafka_consumer.py     # Kafka 소비자
 ```

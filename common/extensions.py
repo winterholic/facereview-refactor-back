@@ -23,5 +23,3 @@ mongo_db = None
 scheduler = APScheduler()
 
 celery = celery_app
-
-kafka_producer = None

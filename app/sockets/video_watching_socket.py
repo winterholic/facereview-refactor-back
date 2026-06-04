@@ -11,7 +11,6 @@ from app.models.video_view_log import VideoViewLog
 from app.models.video import Video
 from common.extensions import db
 from common.utils.logging_utils import get_logger
-from common.utils.kafka_producer import send_watch_frame_event
 from common.enum.youtube_genre import GenreEnum
 from common.utils.category_rec_alg import CATEGORY_PREFERRED_EMOTION
 import json
@@ -148,16 +147,6 @@ def handle_watch_frame(message):
             'sad': user_emotion['sad'],
             'angry': user_emotion['angry']
         }
-
-        #NOTE: Kafka로 프레임 데이터 백업 전송
-        send_watch_frame_event(
-            video_view_log_id=video_view_log_id,
-            user_id=user_id,
-            video_id=video_id,
-            youtube_running_time=youtube_running_time,
-            emotion_percentages=emotion_percentages,
-            most_emotion=user_emotion['most_emotion']
-        )
 
         #NOTE: 첫 프레임은 타임라인 캐시가 백그라운드 로딩 중이므로 skip
         average_emotion = None if is_first_frame else _get_average_emotion_at_time(video_view_log_id, youtube_running_time)
