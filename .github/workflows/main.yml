@@ -115,9 +115,12 @@ jobs:
           script: |
             set -eu
             cd "$DEPLOY_PATH"
+            APP=facereview
+            DC="sudo /usr/local/bin/deployctl"
+            TAG="${IMAGE_TAG:-latest}"
 
             echo "🔐 GHCR 로그인..."
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            echo "$GHCR_TOKEN" | $DC "$APP" ghcr-login "$GHCR_USER"
 
             echo "🔑 Infisical 인증 (Machine Identity / Universal Auth)..."
             INFISICAL_TOKEN=$("$INFISICAL_BIN" login --method=universal-auth \
@@ -131,21 +134,20 @@ jobs:
               --projectId="$INFISICAL_PROJECT_ID" --env="$INFISICAL_ENV" --path="$INFISICAL_PATH" \
               --format=dotenv > .env
 
-            echo "📦 이미지 pull & 기동 (tag: ${IMAGE_TAG:-latest})..."
-            export IMAGE_TAG
-            docker compose pull
-            docker compose up -d --remove-orphans
+            echo "📦 이미지 pull & 기동 (tag: $TAG)..."
+            $DC "$APP" pull --tag "$TAG"
+            $DC "$APP" up --tag "$TAG"
 
             echo "🧹 GHCR 로그아웃 + dangling 이미지 정리..."
-            docker logout ghcr.io
-            docker image prune -f
+            $DC "$APP" ghcr-logout
+            $DC "$APP" prune
 
             echo "🔍 헬스체크..."
             for i in $(seq 1 30); do
               code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health || echo 000)
               if [ "$code" = "200" ]; then echo "✅ health OK ($code)"; break; fi
-              if [ "$i" = "30" ]; then echo "❌ health 실패"; docker compose logs --tail=50 app; exit 1; fi
+              if [ "$i" = "30" ]; then echo "❌ health 실패"; $DC "$APP" logs app; exit 1; fi
               sleep 2
             done
 
-            docker compose ps
+            $DC "$APP" ps
