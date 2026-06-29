@@ -146,6 +146,19 @@ class YoutubeWatchingDataRepository:
 
         return [YoutubeWatchingData.from_dict(doc) for doc in docs]
 
+    def find_recent_summaries_by_user_id(self, user_id: str, limit: int = 20):
+        projection = {
+            'emotion_score_timeline': 0,
+            'most_emotion_timeline': 0,
+            'client_info': 0,
+        }
+        docs = self.collection.find(
+            {'user_id': user_id},
+            projection
+        ).sort('created_at', -1).limit(limit)
+
+        return list(docs)
+
     def find_by_video_id(self, video_id: str, limit: int = 100):
         docs = self.collection.find(
             {'video_id': video_id}

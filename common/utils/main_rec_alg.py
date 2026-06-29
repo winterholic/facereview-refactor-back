@@ -189,6 +189,45 @@ def apply_emotion_health(score: float, video: Dict, recent: List[Dict]) -> float
     return score
 
 
+def _generate_candidate_videos(all_videos: List[Dict], viewed_ids: set, favorite_genres: List[str],
+                               emotion_pref: Dict, user_logs: List[Dict], limit: int = 20) -> List[Dict]:
+    candidate_limit = max(limit * 10, 200)
+    viewed_ids = viewed_ids or set()
+    seen_video_ids = {log.get('video_id') for log in user_logs[-200:]} if user_logs else set()
+
+    candidates = []
+    for video in all_videos:
+        video_id = video.get('video_id')
+        if video_id in viewed_ids or video.get('is_deleted'):
+            continue
+
+        score = 0.0
+        if video.get('category') in favorite_genres:
+            score += 40.0
+        if video_id in seen_video_ids:
+            score -= 100.0
+
+        emotion_dist = video.get('emotion_distribution') or {}
+        if emotion_dist:
+            score += cosine_similarity(emotion_pref, emotion_dist) * 45.0
+
+        dominant = video.get('dominant_emotion')
+        score += emotion_pref.get(dominant, 0.0) * 15.0
+        score += min(float(video.get('average_completion_rate') or 0.0) * 20.0, 20.0)
+
+        views = int(video.get('view_count') or 0)
+        likes = int(video.get('like_count') or 0)
+        if views > 0:
+            score += min(math.log10(views + 1) * 2.0, 10.0)
+        if likes > 0:
+            score += min(math.log10(likes + 1) * 2.5, 10.0)
+
+        candidates.append({'video': video, 'score': score})
+
+    top = heapq.nlargest(candidate_limit, candidates, key=lambda x: x['score'])
+    return [item['video'] for item in top]
+
+
 def get_personalized_recommendations(all_videos: List[Dict], user_data: Dict,
                                      recent_watching: List[Dict], user_logs: List[Dict],
                                      viewed_ids: set, limit: int = 20) -> List[Dict]:
@@ -207,9 +246,17 @@ def get_personalized_recommendations(all_videos: List[Dict], user_data: Dict,
 
     #NOTE: cat_emo_pref를 루프 밖에서 1회만 계산 (기존: 영상마다 반복 계산하는 버그 수정)
     cat_emo_pref = calculate_category_emotion_preference(recent_watching)
+    candidate_videos = _generate_candidate_videos(
+        all_videos=all_videos,
+        viewed_ids=viewed_ids,
+        favorite_genres=fav_genres,
+        emotion_pref=emo_pref,
+        user_logs=user_logs,
+        limit=limit
+    )
 
     scored = []
-    for video in all_videos:
+    for video in candidate_videos:
         if video['video_id'] in viewed_ids or video.get('is_deleted'):
             continue
         p = calculate_personalization_score(video, fav_genres, emo_pref, recent_watching, cat_emo_pref)

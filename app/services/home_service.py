@@ -357,7 +357,7 @@ class HomeService:
         user_view_logs = VideoViewLog.query.filter_by(user_id=user_id).all()
         viewed_video_ids = {log.video_id for log in user_view_logs}
         watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
-        recent_watching_data_objs = watching_data_repo.find_by_user_id(user_id, limit=20)
+        recent_watching_data_objs = watching_data_repo.find_recent_summaries_by_user_id(user_id, limit=20)
 
         #NOTE: 영상 풀 캐시에서 조회 (없으면 DB에서 빌드 후 캐싱)
         video_pool = HomeService._get_video_pool_from_cache()
@@ -375,16 +375,17 @@ class HomeService:
 
         recent_watching_data = []
         for wd in recent_watching_data_objs:
-            if wd.dominant_emotion is None:
+            dominant_emotion = wd.get('dominant_emotion')
+            if dominant_emotion is None:
                 continue
-            emotion_pct = wd.emotion_percentages.to_dict()
+            emotion_pct = wd.get('emotion_percentages', {})
             recent_watching_data.append({
-                'video_id': wd.video_id,
-                'category': video_category_map.get(wd.video_id),
-                'completion_rate': wd.completion_rate,
-                'dominant_emotion': wd.dominant_emotion,
+                'video_id': wd.get('video_id'),
+                'category': video_category_map.get(wd.get('video_id')),
+                'completion_rate': wd.get('completion_rate', 0.0),
+                'dominant_emotion': dominant_emotion,
                 'emotion_percentages': emotion_pct,
-                'created_at': wd.created_at
+                'created_at': wd.get('created_at')
             })
 
         user_data_dict = {

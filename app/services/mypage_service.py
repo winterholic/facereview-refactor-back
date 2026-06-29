@@ -67,6 +67,88 @@ def _extract_emotion_scores(scores) -> Dict[str, float]:
     return result
 
 
+def _estimate_watch_seconds_from_summary(doc: Dict) -> float:
+    duration = doc.get('duration')
+    completion_rate = doc.get('completion_rate')
+    try:
+        duration = float(duration)
+        completion_rate = float(completion_rate)
+    except (TypeError, ValueError):
+        duration = 0.0
+        completion_rate = 0.0
+
+    if duration > 0 and completion_rate > 0:
+        return max(0.0, duration * min(completion_rate, 1.0))
+
+    timeline_len = doc.get('timeline_len')
+    try:
+        timeline_len = int(timeline_len)
+    except (TypeError, ValueError):
+        timeline_len = 0
+    if timeline_len > 0:
+        return timeline_len / 10.0
+
+    frame_count = doc.get('frame_count')
+    try:
+        frame_count = int(frame_count)
+    except (TypeError, ValueError):
+        frame_count = 0
+    if frame_count > 0:
+        return frame_count / 10.0
+
+    timeline = doc.get('emotion_score_timeline') or {}
+    if timeline:
+        parsed_keys = []
+        for key in timeline.keys():
+            try:
+                parsed_keys.append(float(key))
+            except (TypeError, ValueError):
+                continue
+        if parsed_keys:
+            return max(parsed_keys) / 100.0
+
+    return 0.0
+
+
+def _build_emotion_summary_from_docs(docs: List[Dict]) -> Dict:
+    emotions = ['neutral', 'happy', 'surprise', 'sad', 'angry']
+    emotion_seconds = {emotion: 0.0 for emotion in emotions}
+
+    for doc in docs:
+        timeline = doc.get('most_emotion_timeline') or {}
+        per_second_emotion = {}
+        for time_key, emotion in timeline.items():
+            if emotion not in emotion_seconds:
+                continue
+            try:
+                second = int(float(time_key) // 100)
+            except (TypeError, ValueError):
+                continue
+            per_second_emotion[second] = emotion
+
+        if per_second_emotion:
+            for emotion in per_second_emotion.values():
+                emotion_seconds[emotion] += 1.0
+            continue
+
+        watch_secs = _estimate_watch_seconds_from_summary(doc)
+        percentages = doc.get('emotion_percentages') or {}
+        for emotion in emotion_seconds:
+            emotion_seconds[emotion] += float(percentages.get(emotion, 0.0)) * watch_secs
+
+    total_time = sum(emotion_seconds.values())
+    return {
+        'emotion_percentages': {
+            emotion: round((seconds / total_time) * 100, 1) if total_time > 0 else 0.0
+            for emotion, seconds in emotion_seconds.items()
+        },
+        'emotion_seconds': {
+            emotion: int(seconds)
+            for emotion, seconds in emotion_seconds.items()
+        }
+    }
+
+
 class MypageService:
     @staticmethod
     @transactional
@@ -262,36 +344,24 @@ class MypageService:
 
         repo = YoutubeWatchingDataRepository(mongo_db)
 
-        #NOTE: timeline 전체 데이터 대신 저장된 emotion_percentages + timeline 길이만 집계
-        pipeline = [
-            {'$match': {'user_id': user_id}},
-            {'$project': {
+        #NOTE: 0.1초 프레임을 고유 초 단위로 묶어 예전 도넛 시간 의미를 유지
+        docs = list(repo.collection.find(
+            {'user_id': user_id},
+            {
+                'most_emotion_timeline': 1,
                 'emotion_percentages': 1,
-                'timeline_len': {'$size': {'$objectToArray': '$emotion_score_timeline'}},
+                'duration': 1,
+                'completion_rate': 1,
+                'frame_count': 1,
                 '_id': 0
-            }}
-        ]
-        docs = list(repo.collection.aggregate(pipeline))
+            }
+        ))
 
-        total_seconds = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
-
-        for doc in docs:
-            ep = doc.get('emotion_percentages', {})
-            watch_secs = doc.get('timeline_len', 0) / 2
-            for emotion in total_seconds:
-                total_seconds[emotion] += float(ep.get(emotion, 0.0)) * watch_secs
-
-        total_time = sum(total_seconds.values())
-        emotion_percentages = {}
-        emotion_seconds = {}
-
-        for emotion, seconds in total_seconds.items():
-            emotion_seconds[emotion] = int(seconds)
-            emotion_percentages[emotion] = round((seconds / total_time) * 100, 1) if total_time > 0 else 0.0
+        summary = _build_emotion_summary_from_docs(docs)
 
         return EmotionSummaryDto(
-            emotion_percentages=emotion_percentages,
-            emotion_seconds=emotion_seconds
+            emotion_percentages=summary['emotion_percentages'],
+            emotion_seconds=summary['emotion_seconds']
         ).to_dict()
 
     @staticmethod
