@@ -25,6 +25,7 @@ CATEGORY_WEIGHTS = {
 }
 
 SCORE_WEIGHTS = {'personalization': 0.55, 'quality': 0.20, 'freshness': 0.10, 'diversity': 0.15}
+RECENCY_DECAY = 0.88
 
 
 def cosine_similarity(vec1: Dict[str, float], vec2: Dict[str, float]) -> float:
@@ -41,10 +42,11 @@ def calculate_emotion_preference(watching_data: List[Dict]) -> Dict[str, float]:
     if not watching_data:
         return {'neutral': 0.2, 'happy': 0.2, 'surprise': 0.2, 'sad': 0.2, 'angry': 0.2}
     emotion_sum = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
-    for data in watching_data:
+    for idx, data in enumerate(watching_data):
+        weight = RECENCY_DECAY ** idx
         for emotion, pct in data.get('emotion_percentages', {}).items():
             if emotion in emotion_sum:
-                emotion_sum[emotion] += pct
+                emotion_sum[emotion] += pct * weight
     total = sum(emotion_sum.values())
     return {k: v / total for k, v in emotion_sum.items()} if total else {k: 0.2 for k in emotion_sum}
 
@@ -52,22 +54,23 @@ def calculate_emotion_preference(watching_data: List[Dict]) -> Dict[str, float]:
 def calculate_category_emotion_preference(recent_data: List[Dict]) -> Dict[str, Dict[str, float]]:
     """카테고리별 감정 선호도 계산: {category: {emotion: avg_pct}}"""
     cat_emo_sum: Dict[str, Dict[str, float]] = {}
-    cat_count: Dict[str, int] = {}
-    for d in recent_data:
+    cat_weight: Dict[str, float] = {}
+    for idx, d in enumerate(recent_data):
         cat = d.get('category')
         if not cat:
             continue
         if cat not in cat_emo_sum:
             cat_emo_sum[cat] = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
-            cat_count[cat] = 0
+            cat_weight[cat] = 0.0
+        weight = RECENCY_DECAY ** idx
         for emo, pct in d.get('emotion_percentages', {}).items():
             if emo in cat_emo_sum[cat]:
-                cat_emo_sum[cat][emo] += pct
-        cat_count[cat] += 1
+                cat_emo_sum[cat][emo] += pct * weight
+        cat_weight[cat] += weight
     result = {}
     for cat, emo_sum in cat_emo_sum.items():
-        n = cat_count[cat]
-        result[cat] = {e: v / n for e, v in emo_sum.items()}
+        total_weight = cat_weight[cat]
+        result[cat] = {e: v / total_weight for e, v in emo_sum.items()} if total_weight else emo_sum
     return result
 
 
@@ -268,18 +271,30 @@ def get_personalized_recommendations(all_videos: List[Dict], user_data: Dict,
         final = apply_emotion_health(final, video, recent_watching)
         scored.append({'video': video, 'score': final})
 
-    #NOTE: 전체 정렬 O(n log n) → 힙으로 top-k 추출 O(n log k), 다양성 필터 여유분으로 limit*3
-    scored = heapq.nlargest(limit * 3, scored, key=lambda x: x['score'])
+    #NOTE: 다양성 필터 이후에도 결과를 채울 수 있게 넉넉한 랭킹 풀을 유지
+    ranked = heapq.nlargest(max(limit * 8, limit), scored, key=lambda x: x['score'])
 
     result, cats, emos = [], [], []
-    for item in scored:
+    selected_ids = set()
+    for item in ranked:
         v = item['video']
         cat, emo = v.get('category'), v.get('dominant_emotion', 'neutral')
         if (len(cats) >= 2 and cats[-2:].count(cat) >= 2) or (len(emos) >= 3 and emos[-3:].count(emo) >= 3):
             continue
         result.append(v)
+        selected_ids.add(v.get('video_id'))
         cats.append(cat)
         emos.append(emo)
         if len(result) >= limit:
             break
+    if len(result) < limit:
+        for item in ranked:
+            v = item['video']
+            video_id = v.get('video_id')
+            if video_id in selected_ids:
+                continue
+            result.append(v)
+            selected_ids.add(video_id)
+            if len(result) >= limit:
+                break
     return result
