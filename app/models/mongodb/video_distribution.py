@@ -7,7 +7,7 @@ logger = get_logger('video_distribution')
 
 EMOTION_LABELS = ["neutral", "happy", "surprise", "sad", "angry"]
 
-# NOTE: 카테고리별 감정 가중치 (main_rec_alg.py에서 가져옴)
+# NOTE: 카테고리별 감정 가중치 (recommendation_scores·dominant_emotion 계산용)
 CATEGORY_WEIGHTS = {
     'drama': {'neutral': 0.5, 'happy': 2.5, 'surprise': 2.0, 'sad': 3.0, 'angry': 2.0},
     'eating': {'neutral': 1.0, 'happy': 4.0, 'surprise': 2.5, 'sad': 0.2, 'angry': 0.5},

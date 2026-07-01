@@ -31,7 +31,7 @@ services:
       - FLASK_ENV=production
     # 이미지 ENTRYPOINT가 gunicorn 고정이라 비워야 아래 command(celery)가 실제로 실행됨
     entrypoint: []
-    command: celery -A common.celery_app.celery_app worker --loglevel=info
+    command: celery -A common.celery_app.celery_app worker --loglevel=info -Q celery,watching_data
     volumes:
       - ./logs:/app/logs
     depends_on:

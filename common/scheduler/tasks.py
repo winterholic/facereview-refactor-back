@@ -25,19 +25,19 @@ def register_scheduled_tasks():
         replace_existing=True
     )
 
+    #NOTE: 경주마 2단 추천 Tier1 - 30분마다 Celery로 영상 본질 점수 상위 풀 재계산 (무거운 계산 오프라인화)
     scheduler.add_job(
-        id='refresh_home_cache',
-        func=execute_home_cache_refresh,
-        trigger='cron',
-        hour=5,
-        minute=0,
+        id='rebuild_recommendation_pool',
+        func=trigger_recommendation_pool_rebuild,
+        trigger='interval',
+        minutes=30,
         replace_existing=True
     )
 
     logger.info("모든 스케줄 작업이 등록되었습니다.")
     logger.info("YouTube 인기 동영상 수집: 매일 06:00")
     logger.info("YouTube 카테고리 보충 수집: 매주 화·금 03:00")
-    logger.info("홈 화면 Redis 캐시 갱신: 매일 05:00")
+    logger.info("추천 풀(base_score 상위) 재계산: 30분 간격")
 
 
 def execute_youtube_trending_job():
@@ -62,13 +62,18 @@ def execute_youtube_category_fill_job():
             logger.error(f"YouTube 카테고리 보충 수집 작업 실패: {str(e)}", exc_info=True)
 
 
-def execute_home_cache_refresh():
-    with scheduler.app.app_context():
-        try:
-            logger.info("홈 화면 Redis 캐시 갱신 작업 시작")
-            from app.services.home_service import HomeService
-            HomeService._build_and_cache_video_pool()
-            HomeService._build_and_cache_category_videos()
-            logger.info("홈 화면 Redis 캐시 갱신 작업 완료")
-        except Exception as e:
-            logger.error(f"홈 화면 Redis 캐시 갱신 작업 실패: {str(e)}", exc_info=True)
+def trigger_recommendation_pool_rebuild():
+    #NOTE: 무거운 계산은 Celery 워커로 오프로드. 워커/브로커 장애 시 앱 컨텍스트에서 동기 폴백
+    try:
+        from common.tasks.recommendation_tasks import rebuild_recommendation_pool_task
+        rebuild_recommendation_pool_task.delay()
+        logger.info("추천 풀 재계산 Celery 태스크 enqueue")
+    except Exception as e:
+        logger.warning(f"추천 풀 재계산 enqueue 실패 → 동기 폴백: {e}")
+        with scheduler.app.app_context():
+            try:
+                from app.services.home_service import HomeService
+                HomeService._build_and_cache_ranked_pool()
+                logger.info("추천 풀 재계산 동기 폴백 완료")
+            except Exception as inner:
+                logger.error(f"추천 풀 재계산 동기 폴백 실패: {inner}", exc_info=True)

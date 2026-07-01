@@ -11,8 +11,6 @@ from app.models.video_view_log import VideoViewLog
 from app.models.video import Video
 from common.extensions import db
 from common.utils.logging_utils import get_logger
-from common.enum.youtube_genre import GenreEnum
-from common.utils.category_rec_alg import CATEGORY_PREFERRED_EMOTION
 import json
 
 logger = get_logger('socket')
@@ -557,71 +555,11 @@ def _update_realtime_statistics(
             duration=video_duration
         )
 
-        #NOTE: Redis 캐시 write-through (MongoDB 업데이트 후 Redis도 동기화)
-        if updated_dist:
-            _update_video_pool_cache(video_id, updated_dist)
-            _update_category_videos_cache(video_id, category, updated_dist)
-
+        #NOTE: 추천 풀은 30분 주기 Celery 재계산으로 반영됨 (프레임마다 write-through 하던 로직 제거)
         logger.info(f"[REALTIME_SAVE] 완료: {video_view_log_id}, time_key={time_key_preview}, emotion={most_emotion}, category={category}, duration={video_duration}")
 
     except Exception as e:
         logger.error(f"실시간 통계 업데이트 중 오류 발생: {e}", exc_info=True)
-
-
-def _get_preferred_emotion_for_category(category: str) -> str:
-    """카테고리 문자열로 선호 감정 반환 (CATEGORY_PREFERRED_EMOTION 참조)"""
-    try:
-        genre_enum = GenreEnum(category)
-        return CATEGORY_PREFERRED_EMOTION.get(genre_enum, 'neutral')
-    except (ValueError, KeyError):
-        return 'neutral'
-
-
-def _update_video_pool_cache(video_id: str, updated_dist) -> None:
-    """video_pool_cache 해시에서 해당 video_id의 감정 관련 필드만 업데이트"""
-    try:
-        if not redis_client:
-            return
-        existing = redis_client.hget('facereview:video_pool_cache', video_id)
-        if not existing:
-            return  # 캐시에 없으면 skip (TTL 만료 후 재빌드 시 반영됨)
-        video_data = json.loads(existing)
-        video_data['emotion_distribution'] = updated_dist.emotion_averages.to_dict()
-        video_data['dominant_emotion'] = updated_dist.dominant_emotion
-        video_data['average_completion_rate'] = updated_dist.average_completion_rate
-        redis_client.hset('facereview:video_pool_cache', video_id, json.dumps(video_data))
-    except Exception as e:
-        logger.error(f"video_pool_cache write-through 실패: {e}")
-
-
-def _update_category_videos_cache(video_id: str, category: str, updated_dist) -> None:
-    """category_videos 해시에서 해당 카테고리의 video 항목 업데이트 후 재정렬"""
-    try:
-        if not redis_client:
-            return
-        existing = redis_client.hget('facereview:category_videos', category)
-        if not existing:
-            return  # 캐시에 없으면 skip
-        videos = json.loads(existing)
-        emotion_averages = updated_dist.emotion_averages.to_dict()
-        dominant_emotion = updated_dist.dominant_emotion
-        preferred_emotion = _get_preferred_emotion_for_category(category)
-
-        updated = False
-        for v in videos:
-            if v['video_id'] == video_id:
-                v['emotion_distribution'] = emotion_averages
-                v['dominant_emotion'] = dominant_emotion
-                v['dominant_emotion_per'] = round(emotion_averages.get(dominant_emotion, 0.0) * 100.0, 2)
-                v['preferred_emotion_ratio'] = emotion_averages.get(preferred_emotion, 0.0)
-                updated = True
-                break
-
-        if updated:
-            videos.sort(key=lambda x: x.get('preferred_emotion_ratio', 0.0), reverse=True)
-            redis_client.hset('facereview:category_videos', category, json.dumps(videos))
-    except Exception as e:
-        logger.error(f"category_videos_cache write-through 실패: {e}")
 
 
 def _create_video_view_log(video_view_log_id: str, user_id: str, video_id: str):

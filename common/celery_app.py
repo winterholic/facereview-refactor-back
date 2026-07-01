@@ -20,7 +20,7 @@ def create_celery_app(app=None):
         'facereview',
         broker=None,
         backend=None,
-        include=['common.tasks.watching_data_tasks']
+        include=['common.tasks.watching_data_tasks', 'common.tasks.recommendation_tasks']
     )
 
     from common.config.celery_config import CeleryConfig
