@@ -66,17 +66,13 @@ def execute_youtube_category_fill_job():
 
 
 def trigger_recommendation_pool_rebuild():
-    #NOTE: 무거운 계산은 Celery 워커로 오프로드. 워커/브로커 장애 시 앱 컨텍스트에서 동기 폴백
-    try:
-        from common.tasks.recommendation_tasks import rebuild_recommendation_pool_task
-        rebuild_recommendation_pool_task.delay()
-        logger.info("추천 풀 재계산 Celery 태스크 enqueue")
-    except Exception as e:
-        logger.warning(f"추천 풀 재계산 enqueue 실패 → 동기 폴백: {e}")
-        with scheduler.app.app_context():
-            try:
-                from app.services.home_service import HomeService
-                HomeService._build_and_cache_ranked_pool()
-                logger.info("추천 풀 재계산 동기 폴백 완료")
-            except Exception as inner:
-                logger.error(f"추천 풀 재계산 동기 폴백 실패: {inner}", exc_info=True)
+    #NOTE: 배포된 Celery 워커(celery -A common.celery_app.celery_app)는 Flask 앱 컨텍스트가 없어
+    #      DB/Mongo/Redis 접근이 불가 → 주기 빌드는 앱 컨텍스트를 가진 APScheduler에서 직접 실행한다
+    #      (원래 execute_home_cache_refresh가 쓰던 검증된 패턴). 이 빌드는 요청 경로 밖(30분 주기)이라 오프라인화 목적 충족.
+    with scheduler.app.app_context():
+        try:
+            from app.services.home_service import HomeService
+            pool, _ = HomeService._build_and_cache_ranked_pool()
+            logger.info(f"추천 풀 재계산 완료: 상위 {len(pool)}개 영상")
+        except Exception as e:
+            logger.error(f"추천 풀 재계산 실패: {e}", exc_info=True)
