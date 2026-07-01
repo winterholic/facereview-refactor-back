@@ -1,5 +1,6 @@
 import json
 import random
+import time
 from flask import current_app
 from common.decorator.db_decorators import transactional_readonly, transactional
 from app.models.user import User
@@ -29,6 +30,13 @@ RECO_CATEGORY_SIZE = 20      # 카테고리별 상위 수
 RECO_PERSONAL_TOP_N = 150    # 요청 시 개인화 재정렬에 쓰는 상위 후보 수
 RECO_PERSONAL_RANDOM_N = 50  # 탐색용 랜덤 후보 수
 RECO_CACHE_TTL = 7200        # 2시간 (30분 주기 갱신 대비 여유)
+
+#NOTE: Redis 불통 시 워커 프로세스 인메모리 폴백 캐시 (Redis 복구되면 자동으로 공유 캐시 우선)
+_MEM_CACHE = {'pool': None, 'categories': None, 'ts': 0.0}
+
+
+def _mem_cache_fresh() -> bool:
+    return _MEM_CACHE['pool'] is not None and (time.time() - _MEM_CACHE['ts']) < RECO_CACHE_TTL
 
 
 class HomeService:
@@ -271,16 +279,27 @@ class HomeService:
             pipe.execute()
             logger.info(f"추천 풀 빌드 완료: 상위 {len(pool)}개 영상, {len(by_category)}개 카테고리 캐싱")
 
-        return pool, HomeService._entries_to_category_dtos(by_category)
+        category_dtos = HomeService._entries_to_category_dtos(by_category)
+
+        #NOTE: Redis 유무와 무관하게 인메모리 폴백 캐시도 항상 갱신 (Redis 불통 시 요청 warm 유지)
+        _MEM_CACHE['pool'] = pool
+        _MEM_CACHE['categories'] = category_dtos
+        _MEM_CACHE['ts'] = time.time()
+        if not redis_client:
+            logger.info(f"추천 풀 빌드 완료(인메모리): 상위 {len(pool)}개 영상, {len(by_category)}개 카테고리")
+
+        return pool, category_dtos
 
     @staticmethod
     def _get_ranked_pool() -> list:
-        #NOTE: 캐시에서 랭킹 풀 조회, 없으면 동기 빌드 (cold start 폴백)
+        #NOTE: Redis(공유) → 인메모리(폴백) → 동기 빌드 순으로 랭킹 풀 확보
         from common.extensions import redis_client
         if redis_client:
             raw = redis_client.get(RECO_POOL_CACHE_KEY)
             if raw:
                 return json.loads(raw)
+        if _mem_cache_fresh():
+            return _MEM_CACHE['pool']
         logger.info("추천 풀 캐시 miss → 동기 빌드")
         return HomeService._build_and_cache_ranked_pool()[0]
 
@@ -371,8 +390,10 @@ class HomeService:
     @staticmethod
     @transactional_readonly
     def get_videos_by_category_emotions():
-        #NOTE: 카테고리 캐시 조회, miss면 동기 빌드가 만든 in-memory DTO를 바로 사용 (캐시 재읽기 금지 - Redis 이슈 시 빈 응답 방지)
+        #NOTE: Redis(공유) → 인메모리(폴백) → 동기 빌드 순. 빌드 결과는 캐시 재읽기 없이 바로 사용 (Redis 이슈 시 빈 응답 방지)
         category_dtos = HomeService._get_category_videos_from_cache()
+        if not category_dtos and _mem_cache_fresh():
+            category_dtos = _MEM_CACHE['categories']
         if not category_dtos:
             logger.info("카테고리 캐시 miss → 추천 풀 동기 빌드")
             _, category_dtos = HomeService._build_and_cache_ranked_pool()

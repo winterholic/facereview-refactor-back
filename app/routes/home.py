@@ -56,8 +56,9 @@ def get_personalized_videos():
 def _reco_diag():
     #NOTE: 임시 진단용 - Redis 생사/추천 캐시 적재 상태 확인 후 제거 예정
     import json as _json
+    import time as _time
     from common.extensions import redis_client
-    from app.services.home_service import RECO_POOL_CACHE_KEY, RECO_CATEGORY_CACHE_KEY
+    from app.services.home_service import RECO_POOL_CACHE_KEY, RECO_CATEGORY_CACHE_KEY, _MEM_CACHE
     info = {'redis': redis_client is not None}
     if redis_client:
         try:
@@ -67,6 +68,9 @@ def _reco_diag():
             info['ttl_pool'] = redis_client.ttl(RECO_POOL_CACHE_KEY)
         except Exception as e:
             info['error'] = str(e)
+    info['mem_pool'] = len(_MEM_CACHE['pool']) if _MEM_CACHE['pool'] else 0
+    info['mem_cats'] = len(_MEM_CACHE['categories']) if _MEM_CACHE['categories'] else 0
+    info['mem_age_s'] = round(_time.time() - _MEM_CACHE['ts'], 1) if _MEM_CACHE['ts'] else -1
     return info
 
 
