@@ -5,6 +5,7 @@ from common.decorator.db_decorators import transactional_readonly, transactional
 from app.models.user import User
 from app.models.video import Video
 from app.models import UserFavoriteGenre, VideoViewLog, VideoRequest, VideoBookmark
+from app.models.video_like import VideoLike
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository
 from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
 from common.enum.error_code import APIError
@@ -13,7 +14,7 @@ from common.exception.exceptions import BusinessError
 from common.extensions import db, mongo_client, mongo_db
 from common.utils.recommendation_alg import compute_base_score, rank_personalized
 from app.dto.home import BaseVideoDataDto, CategoryVideoDataDto, CategoryVideoDataListDto, AllVideoDataDto
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from bson.codec_options import CodecOptions
 from bson.binary import UuidRepresentation
 from common.utils.logging_utils import get_logger
@@ -161,6 +162,12 @@ class HomeService:
             for doc in video_dist_repo.collection.find({'video_id': {'$in': video_ids}})
         }
 
+        #NOTE: 좋아요 수를 영상당 COUNT(N+1) 대신 GROUP BY 한 방으로 집계 (빌드 성능 핵심)
+        like_map = dict(
+            db.session.query(VideoLike.video_id, func.count(VideoLike.video_like_id))
+            .group_by(VideoLike.video_id).all()
+        )
+
         scored = []
         for video in all_videos:
             doc = raw_docs.get(video.video_id)
@@ -184,7 +191,7 @@ class HomeService:
                 'dominant_emotion_per': dominant_per,
                 'emotion_distribution': emotion_dist,
                 'view_count': video.view_count,
-                'like_count': video.like_count,
+                'like_count': like_map.get(video.video_id, 0),
                 'created_at': video.created_at.isoformat() if video.created_at else None,
                 'average_completion_rate': doc.get('average_completion_rate', 0.0),
                 'sample_frames': frames
@@ -196,8 +203,28 @@ class HomeService:
         return scored
 
     @staticmethod
-    def _build_and_cache_ranked_pool() -> list:
-        #NOTE: Tier1 - 영상 본질 점수 상위 풀 + 카테고리별 상위 리스트를 계산해 Redis에 저장. 반환: 슬림 풀 list
+    def _entries_to_category_dtos(by_category: dict) -> list:
+        #NOTE: 슬림 엔트리 dict → CategoryVideoDataDto (캐시 재읽기 없이 in-memory 결과를 바로 응답에 쓰기 위함)
+        dtos = []
+        for cat_name, entries in by_category.items():
+            if not entries:
+                continue
+            video_dtos = [
+                BaseVideoDataDto(
+                    video_id=e['video_id'],
+                    youtube_url=e['youtube_url'],
+                    title=e['title'],
+                    dominant_emotion=e.get('dominant_emotion'),
+                    dominant_emotion_per=e.get('dominant_emotion_per', 0.0)
+                )
+                for e in entries
+            ]
+            dtos.append(CategoryVideoDataDto(category_name=cat_name, videos=video_dtos))
+        return dtos
+
+    @staticmethod
+    def _build_and_cache_ranked_pool() -> tuple:
+        #NOTE: Tier1 - 영상 본질 점수 상위 풀 + 카테고리별 상위 리스트를 계산해 Redis에 저장. 반환: (슬림 풀 list, 카테고리 DTO list)
         from common.extensions import redis_client
         scored = HomeService._load_scored_videos()
         pool = [HomeService._slim_pool_entry(v) for v in scored[:RECO_POOL_SIZE]]
@@ -244,7 +271,7 @@ class HomeService:
             pipe.execute()
             logger.info(f"추천 풀 빌드 완료: 상위 {len(pool)}개 영상, {len(by_category)}개 카테고리 캐싱")
 
-        return pool
+        return pool, HomeService._entries_to_category_dtos(by_category)
 
     @staticmethod
     def _get_ranked_pool() -> list:
@@ -255,7 +282,7 @@ class HomeService:
             if raw:
                 return json.loads(raw)
         logger.info("추천 풀 캐시 miss → 동기 빌드")
-        return HomeService._build_and_cache_ranked_pool()
+        return HomeService._build_and_cache_ranked_pool()[0]
 
     @staticmethod
     def _get_category_videos_from_cache() -> list | None:
@@ -344,12 +371,11 @@ class HomeService:
     @staticmethod
     @transactional_readonly
     def get_videos_by_category_emotions():
-        #NOTE: 카테고리 캐시 조회 (없으면 랭킹 풀 동기 빌드가 카테고리 리스트까지 채움)
+        #NOTE: 카테고리 캐시 조회, miss면 동기 빌드가 만든 in-memory DTO를 바로 사용 (캐시 재읽기 금지 - Redis 이슈 시 빈 응답 방지)
         category_dtos = HomeService._get_category_videos_from_cache()
-        if category_dtos is None:
+        if not category_dtos:
             logger.info("카테고리 캐시 miss → 추천 풀 동기 빌드")
-            HomeService._build_and_cache_ranked_pool()
-            category_dtos = HomeService._get_category_videos_from_cache() or []
+            _, category_dtos = HomeService._build_and_cache_ranked_pool()
 
         return CategoryVideoDataListDto(video_data=category_dtos)
 

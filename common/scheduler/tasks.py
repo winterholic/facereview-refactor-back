@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta
 from common.extensions import scheduler
 from common.scheduler.jobs import YoutubeTrendingJob, YoutubeCategoryFillJob
 from common.utils.logging_utils import get_logger
@@ -26,11 +27,13 @@ def register_scheduled_tasks():
     )
 
     #NOTE: 경주마 2단 추천 Tier1 - 30분마다 Celery로 영상 본질 점수 상위 풀 재계산 (무거운 계산 오프라인화)
+    #      next_run_time을 부팅 직후로 당겨 콜드스타트(첫 요청이 동기 빌드로 느려짐) 방지
     scheduler.add_job(
         id='rebuild_recommendation_pool',
         func=trigger_recommendation_pool_rebuild,
         trigger='interval',
         minutes=30,
+        next_run_time=datetime.now() + timedelta(seconds=15),
         replace_existing=True
     )
 

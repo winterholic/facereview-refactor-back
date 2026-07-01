@@ -14,7 +14,7 @@ def rebuild_recommendation_pool_task(self):
     #NOTE: 경주마 2단 추천 Tier1 - 영상 본질 점수 상위 풀/카테고리 리스트를 주기적으로 재계산해 Redis 갱신
     try:
         from app.services.home_service import HomeService
-        pool = HomeService._build_and_cache_ranked_pool()
+        pool, _ = HomeService._build_and_cache_ranked_pool()
         logger.info(f"추천 풀 재계산 완료: {len(pool)}개 영상")
         return {'status': 'success', 'pool_size': len(pool)}
     except Exception as exc:
