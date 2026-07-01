@@ -51,29 +51,6 @@ def get_personalized_videos():
     return result_dtos
 
 
-@home_blueprint.route('/_recodiag', methods=['GET'])
-@public_route
-def _reco_diag():
-    #NOTE: 임시 진단용 - Redis 생사/추천 캐시 적재 상태 확인 후 제거 예정
-    import json as _json
-    import time as _time
-    from common.extensions import redis_client
-    from app.services.home_service import RECO_POOL_CACHE_KEY, RECO_CATEGORY_CACHE_KEY, _MEM_CACHE
-    info = {'redis': redis_client is not None}
-    if redis_client:
-        try:
-            raw = redis_client.get(RECO_POOL_CACHE_KEY)
-            info['pool_cached'] = len(_json.loads(raw)) if raw else 0
-            info['category_cached'] = redis_client.hlen(RECO_CATEGORY_CACHE_KEY)
-            info['ttl_pool'] = redis_client.ttl(RECO_POOL_CACHE_KEY)
-        except Exception as e:
-            info['error'] = str(e)
-    info['mem_pool'] = len(_MEM_CACHE['pool']) if _MEM_CACHE['pool'] else 0
-    info['mem_cats'] = len(_MEM_CACHE['categories']) if _MEM_CACHE['categories'] else 0
-    info['mem_age_s'] = round(_time.time() - _MEM_CACHE['ts'], 1) if _MEM_CACHE['ts'] else -1
-    return info
-
-
 @home_blueprint.route('/category', methods=['GET'])
 @public_route
 @home_blueprint.response(200, CategoryGroupedResponseSchema(many=True))
