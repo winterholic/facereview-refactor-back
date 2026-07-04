@@ -258,6 +258,43 @@ class SystemStatusResponseSchema(Schema):
     checked_at = fields.String(metadata={'description': '조회 시각 (ISO 8601)'})
 
 
+class SignupTrendPointSchema(Schema):
+    date = fields.String(metadata={'description': '날짜 (YYYY-MM-DD)'})
+    count = fields.Integer(metadata={'description': '해당 일자 신규가입 수'})
+
+
+class VideoRequestPipelineSchema(Schema):
+    pending_count = fields.Integer(metadata={'description': '대기중(PENDING) 요청 수'})
+    avg_processing_minutes = fields.Float(metadata={'description': '최근 30일 처리 완료 요청의 평균 처리 소요시간(분)'})
+
+
+class CategoryPopularitySchema(Schema):
+    category = fields.String(metadata={'description': '카테고리'})
+    view_count = fields.Integer(metadata={'description': '카테고리 합산 조회수'})
+
+
+class EmotionDistributionSchema(Schema):
+    neutral = fields.Float(metadata={'description': '무표정 평균 비율 (0~1)'})
+    happy = fields.Float(metadata={'description': '기쁨 평균 비율 (0~1)'})
+    surprise = fields.Float(metadata={'description': '놀람 평균 비율 (0~1)'})
+    sad = fields.Float(metadata={'description': '슬픔 평균 비율 (0~1)'})
+    angry = fields.Float(metadata={'description': '분노 평균 비율 (0~1)'})
+
+
+class ContentHealthSchema(Schema):
+    avg_completion_rate = fields.Float(metadata={'description': '전체 영상 평균 완주율 (0~1, video_distribution 기준)'})
+    emotion_distribution = fields.Nested(EmotionDistributionSchema, metadata={'description': '전체 시청 감정 분포 평균'})
+    category_top5 = fields.List(fields.Nested(CategoryPopularitySchema), metadata={'description': '조회수 기준 상위 5개 카테고리'})
+
+
+class BusinessStatsResponseSchema(Schema):
+    signup_trend = fields.List(fields.Nested(SignupTrendPointSchema), metadata={'description': '최근 7일 일별 신규가입 추이'})
+    weekly_active_users = fields.Integer(metadata={'description': '최근 7일 순수 시청 유저 수(WAU), 15분 캐시'})
+    video_request_pipeline = fields.Nested(VideoRequestPipelineSchema)
+    content_health = fields.Nested(ContentHealthSchema)
+    computed_at = fields.String(metadata={'description': '계산 시각 (ISO 8601)'})
+
+
 class GenerateDummyDataRequestSchema(Schema):
     count = fields.Integer(
         load_default=30,

@@ -27,7 +27,14 @@ from app.dto.admin import (
     VideoRequestDto, VideoRequestListDto,
     AdminVideoDto, AdminVideoListDto,
     AdminCommentDto, AdminCommentListDto,
+    SignupTrendPointDto, VideoRequestPipelineDto,
+    CategoryPopularityDto, EmotionDistributionDto,
+    ContentHealthDto, BusinessStatsDto,
 )
+
+# NOTE: WAU는 video_view_log 전체 스캔(created_at 단독 인덱스 없음)이라 매 요청 재계산하지 않고 캐시
+_WAU_CACHE_KEY = 'facereview:admin:wau'
+_WAU_CACHE_TTL_SECONDS = 900
 
 
 class AdminService:
@@ -350,6 +357,129 @@ class AdminService:
         db.session.flush()
 
         return MessageResponseDto(message='댓글이 삭제되었습니다.').to_dict()
+
+    @staticmethod
+    @transactional_readonly
+    def get_business_stats() -> Dict:
+        return BusinessStatsDto(
+            signup_trend=AdminService._get_signup_trend(days=7),
+            weekly_active_users=AdminService._get_weekly_active_users(),
+            video_request_pipeline=AdminService._get_video_request_pipeline(),
+            content_health=AdminService._get_content_health(),
+            computed_at=datetime.utcnow().isoformat()
+        ).to_dict()
+
+    @staticmethod
+    def _get_signup_trend(days: int = 7) -> list:
+        start_date = (datetime.utcnow() - timedelta(days=days - 1)).date()
+
+        rows = db.session.query(
+            func.date(User.created_at).label('day'),
+            func.count(User.user_id).label('cnt')
+        ).filter(
+            func.date(User.created_at) >= start_date
+        ).group_by('day').all()
+
+        counts_by_day = {str(day): cnt for day, cnt in rows}
+
+        trend = []
+        for i in range(days):
+            day = start_date + timedelta(days=i)
+            trend.append(SignupTrendPointDto(date=str(day), count=counts_by_day.get(str(day), 0)))
+
+        return trend
+
+    @staticmethod
+    def _get_weekly_active_users() -> int:
+        if redis_client:
+            try:
+                cached = redis_client.get(_WAU_CACHE_KEY)
+                if cached is not None:
+                    return int(cached)
+            except Exception:
+                pass
+
+        week_ago = datetime.utcnow() - timedelta(days=7)
+        wau = db.session.query(
+            func.count(func.distinct(VideoViewLog.user_id))
+        ).filter(
+            VideoViewLog.created_at >= week_ago,
+            VideoViewLog.user_id.isnot(None)
+        ).scalar() or 0
+
+        if redis_client:
+            try:
+                redis_client.setex(_WAU_CACHE_KEY, _WAU_CACHE_TTL_SECONDS, wau)
+            except Exception:
+                pass
+
+        return wau
+
+    @staticmethod
+    def _get_video_request_pipeline() -> VideoRequestPipelineDto:
+        pending_count = db.session.query(VideoRequest).filter_by(status='PENDING').count()
+
+        avg_minutes = db.session.query(
+            func.avg(func.timestampdiff(text('MINUTE'), VideoRequest.created_at, VideoRequest.updated_at))
+        ).filter(
+            VideoRequest.status.in_(['ACCEPTED', 'REJECTED']),
+            VideoRequest.updated_at >= datetime.utcnow() - timedelta(days=30)
+        ).scalar()
+
+        return VideoRequestPipelineDto(
+            pending_count=pending_count,
+            avg_processing_minutes=round(float(avg_minutes), 1) if avg_minutes is not None else 0.0
+        )
+
+    @staticmethod
+    def _get_content_health() -> ContentHealthDto:
+        # NOTE: youtube_watching_data(세션 원본, 매우 큼)를 매번 스캔하지 않고, watch_frame마다
+        #       이미 실시간 갱신되는 video_distribution(영상당 1문서, 작음)에서 바로 평균낸다.
+        try:
+            pipeline = [{
+                '$group': {
+                    '_id': None,
+                    'avg_completion_rate': {'$avg': '$average_completion_rate'},
+                    'avg_neutral': {'$avg': '$emotion_averages.neutral'},
+                    'avg_happy': {'$avg': '$emotion_averages.happy'},
+                    'avg_surprise': {'$avg': '$emotion_averages.surprise'},
+                    'avg_sad': {'$avg': '$emotion_averages.sad'},
+                    'avg_angry': {'$avg': '$emotion_averages.angry'},
+                }
+            }]
+            result = list(mongo_db.video_distribution.aggregate(pipeline))
+        except Exception:
+            result = []
+
+        doc = result[0] if result else {}
+        avg_completion_rate = round(doc.get('avg_completion_rate') or 0.0, 4)
+        emotion_distribution = EmotionDistributionDto(
+            neutral=round(doc.get('avg_neutral') or 0.0, 4),
+            happy=round(doc.get('avg_happy') or 0.0, 4),
+            surprise=round(doc.get('avg_surprise') or 0.0, 4),
+            sad=round(doc.get('avg_sad') or 0.0, 4),
+            angry=round(doc.get('avg_angry') or 0.0, 4),
+        )
+
+        category_rows = db.session.query(
+            Video.category, func.sum(Video.view_count)
+        ).filter(Video.is_deleted == 0).group_by(Video.category).order_by(
+            func.sum(Video.view_count).desc()
+        ).limit(5).all()
+
+        category_top5 = [
+            CategoryPopularityDto(
+                category=category.value if hasattr(category, 'value') else category,
+                view_count=int(total_views or 0)
+            )
+            for category, total_views in category_rows
+        ]
+
+        return ContentHealthDto(
+            avg_completion_rate=avg_completion_rate,
+            emotion_distribution=emotion_distribution,
+            category_top5=category_top5
+        )
 
     @staticmethod
     def get_system_status() -> Dict:

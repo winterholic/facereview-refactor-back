@@ -14,6 +14,7 @@ from app.schemas.admin import (
     GetCommentsRequestSchema, GetCommentsResponseSchema,
     DeleteCommentResponseSchema,
     SystemStatusResponseSchema,
+    BusinessStatsResponseSchema,
     GenerateDummyDataRequestSchema,
     GenerateDummyDataResponseSchema
 )
@@ -170,6 +171,15 @@ def delete_comment(comment_id):
 @admin_blueprint.doc(summary="서버·DB·인프라 상태 및 API 통계 조회", security=[{"BearerAuth": []}])
 def get_system_status():
     return AdminService.get_system_status()
+
+
+@admin_blueprint.route('/dashboard/business-stats', methods=['GET'])
+@login_required
+@admin_required
+@admin_blueprint.response(200, BusinessStatsResponseSchema)
+@admin_blueprint.doc(summary="비즈니스 지표 대시보드 (신규가입 추이·WAU·완주율·카테고리·영상요청 파이프라인)", security=[{"BearerAuth": []}])
+def get_business_stats():
+    return AdminService.get_business_stats()
 
 
 @admin_blueprint.route('/dummy-data', methods=['POST'])

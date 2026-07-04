@@ -206,3 +206,83 @@ class AdminCommentListDto:
             'size': self.size,
             'has_next': self.has_next
         }
+
+
+@dataclass
+class SignupTrendPointDto:
+    date: str
+    count: int
+
+    def to_dict(self):
+        return {'date': self.date, 'count': self.count}
+
+
+@dataclass
+class VideoRequestPipelineDto:
+    pending_count: int
+    avg_processing_minutes: float
+
+    def to_dict(self):
+        return {
+            'pending_count': self.pending_count,
+            'avg_processing_minutes': self.avg_processing_minutes
+        }
+
+
+@dataclass
+class CategoryPopularityDto:
+    category: str
+    view_count: int
+
+    def to_dict(self):
+        return {'category': self.category, 'view_count': self.view_count}
+
+
+@dataclass
+class EmotionDistributionDto:
+    neutral: float
+    happy: float
+    surprise: float
+    sad: float
+    angry: float
+
+    def to_dict(self):
+        return {
+            'neutral': self.neutral,
+            'happy': self.happy,
+            'surprise': self.surprise,
+            'sad': self.sad,
+            'angry': self.angry
+        }
+
+
+@dataclass
+class ContentHealthDto:
+    avg_completion_rate: float
+    emotion_distribution: EmotionDistributionDto
+    category_top5: List[CategoryPopularityDto]
+
+    def to_dict(self):
+        return {
+            'avg_completion_rate': self.avg_completion_rate,
+            'emotion_distribution': self.emotion_distribution.to_dict(),
+            'category_top5': [c.to_dict() for c in self.category_top5]
+        }
+
+
+@dataclass
+class BusinessStatsDto:
+    signup_trend: List[SignupTrendPointDto]
+    weekly_active_users: int
+    video_request_pipeline: VideoRequestPipelineDto
+    content_health: ContentHealthDto
+    computed_at: str
+
+    def to_dict(self):
+        return {
+            'signup_trend': [p.to_dict() for p in self.signup_trend],
+            'weekly_active_users': self.weekly_active_users,
+            'video_request_pipeline': self.video_request_pipeline.to_dict(),
+            'content_health': self.content_health.to_dict(),
+            'computed_at': self.computed_at
+        }
