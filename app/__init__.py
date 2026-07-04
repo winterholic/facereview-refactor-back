@@ -76,7 +76,8 @@ def create_app(config_name='default'):
          supports_credentials=True,
          origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:4173", "http://localhost:5000",
          "https://facereview-api.winterholic.net",
-         "https://new-facereview-admin-front.vercel.app"],  # TODO 커스텀 admin 도메인 확정되면 교체
+         "https://admin.facereview.net",
+         "https://facereview-admin.vercel.app"],
          allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
          expose_headers=["Authorization", "Content-Type"],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
