@@ -37,6 +37,14 @@ class VideoRequest(db.Model):
         comment='유튜브 영상 전체 URL (예: https://www.youtube.com/watch?v=dQw4w9WgXcQ)'
     )
 
+    # NOTE: DB(docs/MARIA_CREATE_QUERY.txt)엔 처음부터 NOT NULL 컬럼으로 존재했으나 이 모델에는
+    #       매핑이 누락돼 있었음 — admin_service.get_video_requests()가 결과행에서 category에
+    #       접근할 때마다 AttributeError로 500(요청 1건 이상이면 항상 발생, 0건일 때만 안 터져서
+    #       "목록엔 하나도 안 보임"으로 관측됨). String으로 매핑(Enum 타입 아님) — DB enum 값 집합이
+    #       video.category(GenreEnum)와 달라(예: 'fear' vs GenreEnum의 'horror', exercise/vlog 없음)
+    #       SQLAlchemy Enum으로 매핑하면 값 검증에서 되레 깨짐. 확인 필요: 두 enum을 통일할지 여부.
+    category = Column(String(20), nullable=False, comment='신청 카테고리')
+
     # 상태 관리
     status = Column(
         Enum('PENDING', 'ACCEPTED', 'REJECTED', name='request_status_enum'),
