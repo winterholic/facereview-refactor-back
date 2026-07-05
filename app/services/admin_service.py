@@ -370,6 +370,63 @@ class AdminService:
             computed_at=datetime.utcnow().isoformat()
         ).to_dict()
 
+    SIGNUP_TREND_PERIODS = {
+        '7d': (7, 'day'),
+        '30d': (30, 'day'),
+        '3m': (90, 'week'),
+        '1y': (365, 'month'),
+        '3y': (1095, 'month'),
+    }
+
+    @staticmethod
+    @transactional_readonly
+    def get_signup_trend(period: str) -> Dict:
+        days, granularity = AdminService.SIGNUP_TREND_PERIODS.get(period, (7, 'day'))
+        start_date = (datetime.utcnow() - timedelta(days=days - 1)).date()
+        today = datetime.utcnow().date()
+
+        # NOTE: 일 단위로 한 번만 집계(가입일 수는 기간과 무관하게 적음)하고, 주/월 버킷은
+        #       파이썬에서 묶는다 — YEARWEEK/DATE_FORMAT 등 SQL 날짜연산 없이 동일 결과.
+        day_expr = func.date(User.created_at)
+        rows = db.session.query(
+            day_expr.label('day'),
+            func.count(User.user_id).label('cnt')
+        ).filter(
+            day_expr >= start_date
+        ).group_by(day_expr).all()
+        daily_counts = {row.day: row.cnt for row in rows}
+
+        if granularity == 'day':
+            points = []
+            for i in range(days):
+                d = start_date + timedelta(days=i)
+                points.append((d, daily_counts.get(d, 0)))
+        elif granularity == 'week':
+            bucket_totals = {}
+            cursor = start_date - timedelta(days=start_date.weekday())
+            while cursor <= today:
+                bucket_totals[cursor] = 0
+                cursor += timedelta(days=7)
+            for d, cnt in daily_counts.items():
+                monday = d - timedelta(days=d.weekday())
+                bucket_totals[monday] = bucket_totals.get(monday, 0) + cnt
+            points = sorted(bucket_totals.items())
+        else:  # month
+            bucket_totals = {}
+            cursor = start_date.replace(day=1)
+            while cursor <= today:
+                bucket_totals[cursor] = 0
+                cursor = (cursor.replace(day=28) + timedelta(days=4)).replace(day=1)
+            for d, cnt in daily_counts.items():
+                month_start = d.replace(day=1)
+                bucket_totals[month_start] = bucket_totals.get(month_start, 0) + cnt
+            points = sorted(bucket_totals.items())
+
+        return {
+            'points': [SignupTrendPointDto(date=str(d), count=c).to_dict() for d, c in points],
+            'granularity': granularity,
+        }
+
     @staticmethod
     def _get_signup_trend(days: int = 7) -> list:
         start_date = (datetime.utcnow() - timedelta(days=days - 1)).date()
@@ -488,11 +545,13 @@ class AdminService:
             if row.get('_id')
         ]
 
+        # NOTE: GenreEnum 자체가 16종으로 자연히 상한이 있어 limit 없이 전체를 반환(더 이상
+        #       "Top 5"가 아니라 카테고리별 전체 조회수 — 필드명은 하위 호환을 위해 유지).
         category_rows = db.session.query(
             Video.category, func.sum(Video.view_count)
         ).filter(Video.is_deleted == 0).group_by(Video.category).order_by(
             func.sum(Video.view_count).desc()
-        ).limit(5).all()
+        ).all()
 
         category_top5 = [
             CategoryPopularityDto(

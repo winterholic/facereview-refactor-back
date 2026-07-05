@@ -263,8 +263,21 @@ class SystemStatusResponseSchema(Schema):
 
 
 class SignupTrendPointSchema(Schema):
-    date = fields.String(metadata={'description': '날짜 (YYYY-MM-DD)'})
-    count = fields.Integer(metadata={'description': '해당 일자 신규가입 수'})
+    date = fields.String(metadata={'description': '날짜 (YYYY-MM-DD, 버킷 시작일)'})
+    count = fields.Integer(metadata={'description': '해당 구간 신규가입 수'})
+
+
+class SignupTrendRequestSchema(Schema):
+    period = fields.String(
+        load_default='7d',
+        validate=validate.OneOf(['7d', '30d', '3m', '1y', '3y']),
+        metadata={'description': '조회 기간 (7d/30d/3m/1y/3y)'}
+    )
+
+
+class SignupTrendResponseSchema(Schema):
+    points = fields.List(fields.Nested(SignupTrendPointSchema), metadata={'description': '기간별 신규가입 추이'})
+    granularity = fields.String(metadata={'description': '집계 단위 (day/week/month)'})
 
 
 class VideoRequestPipelineSchema(Schema):
@@ -296,7 +309,7 @@ class DominantEmotionCountSchema(Schema):
 class ContentHealthSchema(Schema):
     avg_completion_rate = fields.Float(metadata={'description': '전체 영상 평균 완주율 (0~1, video_distribution 기준, 실제 시청 문서만 집계)'})
     emotion_distribution = fields.Nested(EmotionDistributionSchema, metadata={'description': '전체 시청 감정 분포 평균 (실제 시청 문서만 집계, 합계 = 1)'})
-    category_top5 = fields.List(fields.Nested(CategoryPopularitySchema), metadata={'description': '조회수 기준 상위 5개 카테고리'})
+    category_top5 = fields.List(fields.Nested(CategoryPopularitySchema), metadata={'description': '카테고리별 조회수 (조회수 내림차순 전체, 필드명은 하위호환용)'})
     dominant_emotion_video_counts = fields.List(
         fields.Nested(DominantEmotionCountSchema),
         metadata={'description': '지배 감정 기준 영상 수 분포 (평균 강도 대신 대표 감정 빈도)'}

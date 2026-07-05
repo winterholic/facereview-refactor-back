@@ -15,6 +15,8 @@ from app.schemas.admin import (
     DeleteCommentResponseSchema,
     SystemStatusResponseSchema,
     BusinessStatsResponseSchema,
+    SignupTrendRequestSchema,
+    SignupTrendResponseSchema,
     GenerateDummyDataRequestSchema,
     GenerateDummyDataResponseSchema
 )
@@ -181,6 +183,16 @@ def get_system_status():
 @admin_blueprint.doc(summary="비즈니스 지표 대시보드 (신규가입 추이·WAU·완주율·카테고리·영상요청 파이프라인)", security=[{"BearerAuth": []}])
 def get_business_stats():
     return AdminService.get_business_stats()
+
+
+@admin_blueprint.route('/dashboard/signup-trend', methods=['GET'])
+@login_required
+@admin_required
+@admin_blueprint.arguments(SignupTrendRequestSchema, location='query')
+@admin_blueprint.response(200, SignupTrendResponseSchema)
+@admin_blueprint.doc(summary="기간별 신규가입 추이 (7d/30d/3m/1y/3y)", security=[{"BearerAuth": []}])
+def get_signup_trend(args):
+    return AdminService.get_signup_trend(args['period'])
 
 
 @admin_blueprint.route('/dummy-data', methods=['POST'])
