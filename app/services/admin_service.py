@@ -373,12 +373,16 @@ class AdminService:
     def _get_signup_trend(days: int = 7) -> list:
         start_date = (datetime.utcnow() - timedelta(days=days - 1)).date()
 
+        # NOTE: group_by('day')처럼 문자열 라벨을 그대로 넘기면 SQLAlchemy 2.0에서
+        #       ArgumentError("Textual SQL ... should be explicitly declared as text(...)")로
+        #       500 남 — 실제 컬럼 표현식 객체를 select/group_by 양쪽에 재사용해야 함.
+        day_expr = func.date(User.created_at)
         rows = db.session.query(
-            func.date(User.created_at).label('day'),
+            day_expr.label('day'),
             func.count(User.user_id).label('cnt')
         ).filter(
-            func.date(User.created_at) >= start_date
-        ).group_by('day').all()
+            day_expr >= start_date
+        ).group_by(day_expr).all()
 
         counts_by_day = {str(day): cnt for day, cnt in rows}
 
