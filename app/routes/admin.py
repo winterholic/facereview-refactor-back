@@ -40,8 +40,23 @@ def admin_required(func):
         from common.extensions import db
 
         user = db.session.query(User).filter_by(user_id=g.user_id).first()
-        if not user or user.role != 'ADMIN':
+        if not user or user.role not in ('ADMIN', 'SUPER_ADMIN'):
             raise BusinessError(APIError.USER_NOT_FOUND, "관리자 권한이 필요합니다.")
+
+        return func(*args, **kwargs)
+
+    return wrapper
+
+
+def super_admin_required(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        from app.models.user import User
+        from common.extensions import db
+
+        user = db.session.query(User).filter_by(user_id=g.user_id).first()
+        if not user or user.role != 'SUPER_ADMIN':
+            raise BusinessError(APIError.USER_NOT_FOUND, "최고 관리자 권한이 필요합니다.")
 
         return func(*args, **kwargs)
 
@@ -73,10 +88,10 @@ def deactivate_user(user_id):
 
 @admin_blueprint.route('/users/<user_id>/role', methods=['PATCH'])
 @login_required
-@admin_required
+@super_admin_required
 @admin_blueprint.arguments(ChangeUserRoleRequestSchema)
 @admin_blueprint.response(200, ChangeUserRoleResponseSchema)
-@admin_blueprint.doc(summary="회원 권한 변경 (USER / ADMIN)", security=[{"BearerAuth": []}])
+@admin_blueprint.doc(summary="회원 권한 변경 (GENERAL / ADMIN, SUPER_ADMIN 전용)", security=[{"BearerAuth": []}])
 def change_user_role(data, user_id):
     role = data['role']
     return AdminService.change_user_role(user_id, role)

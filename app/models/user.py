@@ -24,7 +24,7 @@ class User(db.Model):
 
     # 상태 및 권한
     role = Column(
-        Enum('GENERAL', 'ADMIN', name='user_role_enum'),
+        Enum('GENERAL', 'ADMIN', 'SUPER_ADMIN', name='user_role_enum'),
         default='GENERAL',
         nullable=False,
         comment='사용자 권한'
