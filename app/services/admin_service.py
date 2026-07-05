@@ -361,11 +361,34 @@ class AdminService:
     @staticmethod
     @transactional_readonly
     def get_business_stats() -> Dict:
+        # NOTE(임시 진단): 이 엔드포인트가 원인 불명 500을 내고 있어, 어느 하위 집계가
+        # 실패하는지 특정하기 위해 구간별로 감싸 실제 예외 메시지를 노출한다.
+        # 원인 확정되면 이 try/except들은 제거하고 위 4개 호출을 다시 한 번에 묶을 것.
+        try:
+            signup_trend = AdminService._get_signup_trend(days=7)
+        except Exception as e:
+            raise BusinessError(APIError.DB_ERROR, f"[signup_trend] {type(e).__name__}: {e}")
+
+        try:
+            weekly_active_users = AdminService._get_weekly_active_users()
+        except Exception as e:
+            raise BusinessError(APIError.DB_ERROR, f"[weekly_active_users] {type(e).__name__}: {e}")
+
+        try:
+            video_request_pipeline = AdminService._get_video_request_pipeline()
+        except Exception as e:
+            raise BusinessError(APIError.DB_ERROR, f"[video_request_pipeline] {type(e).__name__}: {e}")
+
+        try:
+            content_health = AdminService._get_content_health()
+        except Exception as e:
+            raise BusinessError(APIError.DB_ERROR, f"[content_health] {type(e).__name__}: {e}")
+
         return BusinessStatsDto(
-            signup_trend=AdminService._get_signup_trend(days=7),
-            weekly_active_users=AdminService._get_weekly_active_users(),
-            video_request_pipeline=AdminService._get_video_request_pipeline(),
-            content_health=AdminService._get_content_health(),
+            signup_trend=signup_trend,
+            weekly_active_users=weekly_active_users,
+            video_request_pipeline=video_request_pipeline,
+            content_health=content_health,
             computed_at=datetime.utcnow().isoformat()
         ).to_dict()
 
