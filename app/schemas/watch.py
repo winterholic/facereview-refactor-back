@@ -32,6 +32,7 @@ class VideoDetailResponseSchema(Schema):
     like_count = fields.Integer(metadata={'description': '좋아요 수'})
     comment_count = fields.Integer(metadata={'description': '댓글 수'})
     user_is_liked = fields.Boolean(metadata={'description': '현재 사용자 좋아요 여부'})
+    is_bookmarked = fields.Boolean(metadata={'description': '현재 사용자 북마크 여부'})
     timeline_data = fields.Nested(TimelineDataSchema, metadata={'description': '타임라인 감정 데이터 (압축)'})
 
 class GetRecommendedVideosRequestSchema(Schema):
@@ -57,6 +58,7 @@ class RecommendedVideoSchema(Schema):
     title = fields.String(metadata={'description': '영상 제목'})
     dominant_emotion = fields.String(metadata={'description': '주요 감정'})
     dominant_emotion_per = fields.Float(metadata={'description': '주요 감정 비율 (0.0 ~ 100.0)'})
+    is_bookmarked = fields.Boolean(metadata={'description': '현재 로그인한 유저의 북마크 여부'})
 
 
 class RecommendedVideoListResponseSchema(Schema):

@@ -32,6 +32,7 @@ class VideoResponseSchema(Schema):
     title = fields.String(metadata={'description': '영상 제목'})
     dominant_emotion = fields.String(metadata={'description': '주된 감정 (예: happy, sad)'})
     dominant_emotion_per = fields.Float(metadata={'description': '주된 감정의 백분율 (0.0 ~ 100.0)'})
+    is_bookmarked = fields.Boolean(metadata={'description': '현재 로그인한 유저의 북마크 여부'})
 
 class SearchVideoResponseSchema(Schema):
     videos = fields.List(

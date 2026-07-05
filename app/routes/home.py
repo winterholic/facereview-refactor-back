@@ -2,7 +2,7 @@ from flask import g
 from flask_smorest import Blueprint
 
 from app.schemas.common_schema import SuccessResponseSchema
-from common.decorator.auth_decorators import login_required, login_optional, public_route
+from common.decorator.auth_decorators import login_required, login_optional
 from app.schemas.home import (
     VideoResponseSchema,
     EmotionVideoQuerySchema,
@@ -27,7 +27,7 @@ home_blueprint = Blueprint(
 #TODO: 스케줄러 test용 api 추가
 
 @home_blueprint.route('/search', methods=['GET'])
-@public_route
+@login_optional
 @home_blueprint.arguments(SearchVideoRequestSchema, location='query')
 @home_blueprint.response(200, SearchVideoResponseSchema)
 @home_blueprint.doc(summary="영상 검색")
@@ -38,7 +38,7 @@ def get_search_videos(query_args):
     keyword = query_args['keyword']
     emotions = query_args.get('emotions', [])
 
-    return HomeService.get_search_videos(page, size, keyword_type, keyword, emotions)
+    return HomeService.get_search_videos(page, size, keyword_type, keyword, emotions, g.user_id)
 
 @home_blueprint.route('/personalized', methods=['GET'])
 @login_required
@@ -52,17 +52,17 @@ def get_personalized_videos():
 
 
 @home_blueprint.route('/category', methods=['GET'])
-@public_route
+@login_optional
 @home_blueprint.response(200, CategoryGroupedResponseSchema(many=True))
 @home_blueprint.doc(summary="카테고리별 감정 대표 영상 목록")
 def get_videos_by_category_emotions():
-    result_dto = HomeService.get_videos_by_category_emotions()
+    result_dto = HomeService.get_videos_by_category_emotions(g.user_id)
 
     return result_dto.video_data
 
 
 @home_blueprint.route('/video/all', methods=['GET'])
-@public_route
+@login_optional
 @home_blueprint.arguments(EmotionVideoQuerySchema, location='query')
 @home_blueprint.response(200, AllVideoResponseSchema)
 @home_blueprint.doc(summary="전체 영상 목록 조회 (감정 필터 가능)")
@@ -71,7 +71,7 @@ def get_all_videos(query_args):
     size = query_args['size']
     emotion = query_args['emotion']
 
-    return HomeService.get_all_videos(page, size, emotion)
+    return HomeService.get_all_videos(page, size, emotion, g.user_id)
 
 
 @home_blueprint.route('/bookmark', methods=['POST'])

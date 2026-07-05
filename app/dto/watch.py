@@ -44,6 +44,7 @@ class VideoDetailDto:
     like_count: int
     comment_count: int
     user_is_liked: bool  # 현재 사용자가 좋아요 눌렀는지 여부
+    is_bookmarked: bool  # 현재 사용자가 북마크 등록했는지 여부
     timeline_data: TimelineDataDto  # 압축된 타임라인 데이터
 
     def to_dict(self):
@@ -58,6 +59,7 @@ class VideoDetailDto:
             'like_count': self.like_count,
             'comment_count': self.comment_count,
             'user_is_liked': self.user_is_liked,
+            'is_bookmarked': self.is_bookmarked,
             'timeline_data': self.timeline_data.to_dict()
         }
 
@@ -69,6 +71,7 @@ class RecommendedVideoDto:
     title: str
     dominant_emotion: str
     dominant_emotion_per: float  # 0.0 ~ 100.0
+    is_bookmarked: bool = False
 
     def to_dict(self):
         return {
@@ -76,7 +79,8 @@ class RecommendedVideoDto:
             'youtube_url': self.youtube_url,
             'title': self.title,
             'dominant_emotion': self.dominant_emotion,
-            'dominant_emotion_per': self.dominant_emotion_per
+            'dominant_emotion_per': self.dominant_emotion_per,
+            'is_bookmarked': self.is_bookmarked
         }
 
 

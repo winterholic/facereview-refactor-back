@@ -219,8 +219,9 @@ class VideoDistributionRepository:
         for e in EMOTION_LABELS:
             recommendation_scores[e] = round(emotion_averages[e] * weights[e], 4)
 
-        # NOTE: dominant_emotion 결정 (recommendation_scores 기준)
-        dominant_emotion = max(recommendation_scores, key=recommendation_scores.get)
+        # NOTE: dominant_emotion은 raw emotion_averages 기준 최댓값 (화면에 노출되는 그래프/퍼센트와 항상 일치해야 함)
+        #       recommendation_scores(카테고리 가중치)는 watch_service의 동일감정 내 랭킹 정렬 용도로만 사용
+        dominant_emotion = max(emotion_averages, key=emotion_averages.get)
 
         # NOTE: average_completion_rate 계산 (0.5초 간격이므로 duration * 2가 완주 프레임 수)
         average_completion_rate = 0.0

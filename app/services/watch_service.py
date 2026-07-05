@@ -11,6 +11,7 @@ from common.enum.error_code import APIError
 from app.models.video import Video
 from app.models.comment import Comment
 from app.models.video_like import VideoLike
+from app.models.video_bookmark import VideoBookmark
 from app.models.user import User
 from app.models.mongodb.video_distribution import VideoDistributionRepository
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
@@ -32,12 +33,19 @@ class WatchService:
             raise BusinessError(APIError.VIDEO_NOT_FOUND)
 
         user_is_liked = False
+        is_bookmarked = False
         if user_id:
             like = db.session.query(VideoLike).filter_by(
                 video_id=video_id,
                 user_id=user_id
             ).first()
             user_is_liked = (like is not None)
+
+            bookmark = db.session.query(VideoBookmark).filter_by(
+                video_id=video_id,
+                user_id=user_id
+            ).first()
+            is_bookmarked = (bookmark is not None)
 
         like_count = db.session.query(VideoLike).filter_by(video_id=video_id).count()
         comment_count = db.session.query(Comment).filter_by(video_id=video_id, is_deleted=0).count()
@@ -55,6 +63,7 @@ class WatchService:
             like_count=like_count,
             comment_count=comment_count,
             user_is_liked=user_is_liked,
+            is_bookmarked=is_bookmarked,
             timeline_data=timeline_data
         )
 
@@ -144,7 +153,7 @@ class WatchService:
 
     @staticmethod
     @transactional_readonly
-    def get_recommended_videos(video_id: str, page: int = 1, size: int = 10) -> RecommendedVideoListDto:
+    def get_recommended_videos(video_id: str, page: int = 1, size: int = 10, user_id: str = None) -> RecommendedVideoListDto:
         current_video = db.session.query(Video).filter_by(video_id=video_id, is_deleted=0).first()
         if not current_video:
             raise BusinessError(APIError.VIDEO_NOT_FOUND)
@@ -221,13 +230,23 @@ class WatchService:
         end_idx = start_idx + size
         paginated_videos = scored_videos[start_idx:end_idx]
 
+        #NOTE: 페이지에 실제로 나가는 영상들만 모아 북마크 여부를 단일 쿼리로 조회 (영상별 개별 호출 N+1 방지)
+        bookmarked_ids = set()
+        if user_id and paginated_videos:
+            rows = db.session.query(VideoBookmark.video_id).filter(
+                VideoBookmark.user_id == user_id,
+                VideoBookmark.video_id.in_([v['video_id'] for v in paginated_videos])
+            ).all()
+            bookmarked_ids = {row.video_id for row in rows}
+
         video_dtos = [
             RecommendedVideoDto(
                 video_id=v['video_id'],
                 youtube_url=v['youtube_url'],
                 title=v['title'],
                 dominant_emotion=v['dominant_emotion'],
-                dominant_emotion_per=v['dominant_emotion_per']
+                dominant_emotion_per=v['dominant_emotion_per'],
+                is_bookmarked=v['video_id'] in bookmarked_ids
             )
             for v in paginated_videos
         ]

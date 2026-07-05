@@ -41,7 +41,7 @@ def get_recommended_videos(data):
     page = data.get('page', 1)
     size = data.get('size', 10)
 
-    return WatchService.get_recommended_videos(video_id, page, size)
+    return WatchService.get_recommended_videos(video_id, page, size, g.user_id)
 
 
 @watch_blueprint.route('/comments', methods=['GET'])

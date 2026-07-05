@@ -9,6 +9,7 @@ class BaseVideoDataDto:
     title: str
     dominant_emotion: Optional[str] = None
     dominant_emotion_per: Optional[float] = None
+    is_bookmarked: bool = False
 
     def to_dict(self):
         return {
@@ -16,7 +17,8 @@ class BaseVideoDataDto:
             'youtube_url': self.youtube_url,
             'title': self.title,
             'dominant_emotion': self.dominant_emotion,
-            'dominant_emotion_per': self.dominant_emotion_per
+            'dominant_emotion_per': self.dominant_emotion_per,
+            'is_bookmarked': self.is_bookmarked
         }
 
 @dataclass

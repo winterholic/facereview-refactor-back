@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import random
 import time
@@ -42,8 +43,19 @@ def _mem_cache_fresh() -> bool:
 class HomeService:
 
     @staticmethod
+    def _get_bookmarked_ids(user_id: str, video_ids) -> set:
+        #NOTE: 영상 목록 API마다 개별 북마크 조회(N+1) 대신, 응답에 실릴 video_id들만 모아 단일 쿼리로 조회
+        if not user_id or not video_ids:
+            return set()
+        rows = db.session.query(VideoBookmark.video_id).filter(
+            VideoBookmark.user_id == user_id,
+            VideoBookmark.video_id.in_(video_ids)
+        ).all()
+        return {row.video_id for row in rows}
+
+    @staticmethod
     @transactional_readonly
-    def get_search_videos(page: int, size: int, keyword_type: str, keyword: str, emotions: list = None):
+    def get_search_videos(page: int, size: int, keyword_type: str, keyword: str, emotions: list = None, user_id: str = None):
         #NOTE: Video 테이블에서 LIKE 검색
         query = Video.query.filter_by(is_deleted=0)
 
@@ -69,6 +81,7 @@ class HomeService:
             video_dist_repo = VideoDistributionRepository(mongo_db)
             video_ids = [video.video_id for video in videos]
             video_stats_dict = video_dist_repo.find_by_video_ids(video_ids)
+            bookmarked_ids = HomeService._get_bookmarked_ids(user_id, video_ids)
 
             video_dto_list = []
             for video in videos:
@@ -91,7 +104,8 @@ class HomeService:
                     youtube_url=video.youtube_url,
                     title=video.title,
                     dominant_emotion=dominant_emotion,
-                    dominant_emotion_per=dominant_emotion_per
+                    dominant_emotion_per=dominant_emotion_per,
+                    is_bookmarked=video.video_id in bookmarked_ids
                 ))
 
             has_next = (page * size) < total
@@ -125,6 +139,7 @@ class HomeService:
         page_video_ids = list(video_distributions_dict.keys())
 
         videos = Video.query.filter(Video.video_id.in_(page_video_ids)).all()
+        bookmarked_ids = HomeService._get_bookmarked_ids(user_id, page_video_ids)
 
         video_dto_list = []
         for video in videos:
@@ -138,7 +153,8 @@ class HomeService:
                 youtube_url=video.youtube_url,
                 title=video.title,
                 dominant_emotion=dominant_emotion,
-                dominant_emotion_per=dominant_emotion_per
+                dominant_emotion_per=dominant_emotion_per,
+                is_bookmarked=video.video_id in bookmarked_ids
             ))
 
         has_next = (page * size) < total
@@ -370,26 +386,29 @@ class HomeService:
 
         #NOTE: 풀 자체가 비었거나(감정 데이터 전무) 전부 시청함 → 선호 장르/전체 랜덤 폴백
         if not recommended_videos:
-            genre_videos = [v for v in pool if v.get('category') in favorite_genres]
-            candidates = genre_videos if genre_videos else pool
+            unwatched_pool = [v for v in pool if v.get('video_id') not in viewed_video_ids]
+            genre_videos = [v for v in unwatched_pool if v.get('category') in favorite_genres]
+            candidates = genre_videos if genre_videos else unwatched_pool
             if not candidates:
                 return []
             recommended_videos = random.sample(candidates, min(limit, len(candidates)))
 
+        bookmarked_ids = HomeService._get_bookmarked_ids(user_id, [v['video_id'] for v in recommended_videos])
         return [
             BaseVideoDataDto(
                 video_id=v['video_id'],
                 youtube_url=v['youtube_url'],
                 title=v['title'],
                 dominant_emotion=v.get('dominant_emotion'),
-                dominant_emotion_per=v.get('dominant_emotion_per', 0.0)
+                dominant_emotion_per=v.get('dominant_emotion_per', 0.0),
+                is_bookmarked=v['video_id'] in bookmarked_ids
             )
             for v in recommended_videos
         ]
 
     @staticmethod
     @transactional_readonly
-    def get_videos_by_category_emotions():
+    def get_videos_by_category_emotions(user_id: str = None):
         #NOTE: Redis(공유) → 인메모리(폴백) → 동기 빌드 순. 빌드 결과는 캐시 재읽기 없이 바로 사용 (Redis 이슈 시 빈 응답 방지)
         category_dtos = HomeService._get_category_videos_from_cache()
         if not category_dtos and _mem_cache_fresh():
@@ -398,13 +417,30 @@ class HomeService:
             logger.info("카테고리 캐시 miss → 추천 풀 동기 빌드")
             _, category_dtos = HomeService._build_and_cache_ranked_pool()
 
+        #NOTE: category_dtos는 인메모리 폴백 캐시(_MEM_CACHE)가 프로세스 전역으로 공유하는 객체일 수 있으므로
+        #      절대 원본을 mutate하지 않고, 북마크 여부만 반영한 새 DTO로 복제해서 반환 (아니면 유저 A의 북마크가 다른 요청에 새어나감)
+        if user_id:
+            all_video_ids = [v.video_id for cat in category_dtos for v in cat.videos]
+            bookmarked_ids = HomeService._get_bookmarked_ids(user_id, all_video_ids)
+            if bookmarked_ids:
+                category_dtos = [
+                    CategoryVideoDataDto(
+                        category_name=cat.category_name,
+                        videos=[
+                            dataclasses.replace(v, is_bookmarked=v.video_id in bookmarked_ids)
+                            for v in cat.videos
+                        ]
+                    )
+                    for cat in category_dtos
+                ]
+
         return CategoryVideoDataListDto(video_data=category_dtos)
 
 
 
     @staticmethod
     @transactional_readonly
-    def get_all_videos(page: int, size: int, emotion: str) -> AllVideoDataDto:
+    def get_all_videos(page: int, size: int, emotion: str, user_id: str = None) -> AllVideoDataDto:
         video_dist_repo = VideoDistributionRepository(mongo_db)
 
         query = {}
@@ -439,6 +475,7 @@ class HomeService:
             )
 
         videos = Video.query.filter(Video.video_id.in_(video_ids)).all()
+        bookmarked_ids = HomeService._get_bookmarked_ids(user_id, video_ids)
 
         video_dto_list = []
         for vd in videos:
@@ -457,7 +494,8 @@ class HomeService:
                     youtube_url=vd.youtube_url,
                     title=vd.title,
                     dominant_emotion=dominant_emotion,
-                    dominant_emotion_per=dominant_emotion_per
+                    dominant_emotion_per=dominant_emotion_per,
+                    is_bookmarked=vd.video_id in bookmarked_ids
                 )
             )
 
@@ -531,7 +569,8 @@ class HomeService:
                 youtube_url=video.youtube_url,
                 title=video.title,
                 dominant_emotion=dominant_emotion,
-                dominant_emotion_per=dominant_emotion_per
+                dominant_emotion_per=dominant_emotion_per,
+                is_bookmarked=True  #NOTE: 이 목록 자체가 유저의 북마크 목록이므로 항상 True (별도 쿼리 불필요)
             ))
 
         has_next = (page * size) < total
