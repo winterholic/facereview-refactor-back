@@ -55,7 +55,7 @@ def signup(data):
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
         secure=True,
-        samesite='Lax'
+        samesite='None'
     )
     return response
 
@@ -75,7 +75,7 @@ def login(data):
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
         secure=True,
-        samesite='Lax'
+        samesite='None'
     )
     return response
 
@@ -137,7 +137,7 @@ def reissue_token():
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
         secure=True,
-        samesite='Lax'
+        samesite='None'
     )
     return response
 
