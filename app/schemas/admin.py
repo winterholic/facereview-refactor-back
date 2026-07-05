@@ -269,7 +269,10 @@ class SignupTrendPointSchema(Schema):
 
 class VideoRequestPipelineSchema(Schema):
     pending_count = fields.Integer(metadata={'description': '대기중(PENDING) 요청 수'})
-    avg_processing_minutes = fields.Float(metadata={'description': '최근 30일 처리 완료 요청의 평균 처리 소요시간(분)'})
+    avg_processing_minutes = fields.Float(
+        allow_none=True,
+        metadata={'description': '최근 30일 처리 완료 요청의 평균 처리 소요시간(분). 최근 30일 처리 이력이 없으면 null'}
+    )
 
 
 class CategoryPopularitySchema(Schema):

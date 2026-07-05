@@ -218,7 +218,7 @@ class SignupTrendPointDto:
 @dataclass
 class VideoRequestPipelineDto:
     pending_count: int
-    avg_processing_minutes: float
+    avg_processing_minutes: Optional[float]
 
     def to_dict(self):
         return {

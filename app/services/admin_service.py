@@ -433,7 +433,10 @@ class AdminService:
 
         return VideoRequestPipelineDto(
             pending_count=pending_count,
-            avg_processing_minutes=round(float(avg_minutes), 1) if avg_minutes is not None else 0.0
+            # NOTE: 최근 30일 처리 이력이 없으면 avg_minutes가 None(SQL AVG의 정상 결과) —
+            #       0.0으로 기본값 처리하면 "0분 만에 처리됨"으로 오해됨. null 그대로 노출해
+            #       프론트가 "데이터 없음"으로 구분 표시하게 함.
+            avg_processing_minutes=round(float(avg_minutes), 1) if avg_minutes is not None else None
         )
 
     @staticmethod
