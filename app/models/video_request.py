@@ -3,7 +3,6 @@ from datetime import datetime
 from sqlalchemy import Column, String, Enum, TIMESTAMP, ForeignKey
 from sqlalchemy.orm import relationship
 from common.extensions import db
-from common.enum.youtube_genre import GenreEnum
 
 
 def generate_uuid():
@@ -37,13 +36,13 @@ class VideoRequest(db.Model):
         comment='유튜브 영상 전체 URL (예: https://www.youtube.com/watch?v=dQw4w9WgXcQ)'
     )
 
-    # NOTE: DB(docs/MARIA_CREATE_QUERY.txt)엔 처음부터 NOT NULL 컬럼으로 존재했으나 이 모델에는
-    #       매핑이 누락돼 있었음 — admin_service.get_video_requests()가 결과행에서 category에
-    #       접근할 때마다 AttributeError로 500(요청 1건 이상이면 항상 발생, 0건일 때만 안 터져서
-    #       "목록엔 하나도 안 보임"으로 관측됨). String으로 매핑(Enum 타입 아님) — DB enum 값 집합이
-    #       video.category(GenreEnum)와 달라(예: 'fear' vs GenreEnum의 'horror', exercise/vlog 없음)
-    #       SQLAlchemy Enum으로 매핑하면 값 검증에서 되레 깨짐. 확인 필요: 두 enum을 통일할지 여부.
-    category = Column(String(20), nullable=False, comment='신청 카테고리')
+    # NOTE: docs/MARIA_CREATE_QUERY.txt(참고문서)엔 category 컬럼이 있었지만 실제 운영 DB엔
+    #       한 번도 반영된 적 없음(schema drift) — 여기 매핑했다가 실제 쿼리가
+    #       "Unknown column 'video_request.category'"로 깨지는 걸 실측으로 확인해 되돌림.
+    #       실제 데이터 흐름을 보면 요청 생성 시점(home_service.create_user_video_recommend,
+    #       VideoRecommendRequestSchema)에도 category를 안 받음 — 카테고리는 요청자가 아니라
+    #       "승인하는 관리자가 승인 시점에 고르는 값"이 맞는 설계. approve_video_request()가
+    #       요청 바디로 category를 받도록 변경(아래 참고).
 
     # 상태 관리
     status = Column(

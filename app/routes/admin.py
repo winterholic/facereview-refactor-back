@@ -103,7 +103,8 @@ def approve_video_request(data, request_id):
     youtube_title = data['youtube_title']
     channel_name = data['channel_name']
     duration = data['duration']
-    return AdminService.approve_video_request(request_id, youtube_title, channel_name, duration)
+    category = data['category']
+    return AdminService.approve_video_request(request_id, youtube_title, channel_name, duration, category)
 
 
 @admin_blueprint.route('/video-requests/<request_id>/reject', methods=['POST'])

@@ -85,7 +85,6 @@ class VideoRequestSchema(Schema):
     user_name = fields.String(metadata={'description': '요청 사용자 이름'})
     youtube_url = fields.String(metadata={'description': '유튜브 영상 ID'})
     youtube_full_url = fields.String(metadata={'description': '유튜브 전체 URL'})
-    category = fields.String(metadata={'description': '카테고리'})
     status = fields.String(metadata={'description': '처리 상태'})
     admin_comment = fields.String(metadata={'description': '관리자 코멘트'})
     created_at = fields.String(metadata={'description': '요청일시 (ISO 8601)'})
@@ -115,6 +114,11 @@ class ApproveVideoRequestRequestSchema(Schema):
         required=True,
         validate=validate.Range(min=1),
         metadata={'description': '영상 길이 (초)'}
+    )
+    category = fields.String(
+        required=True,
+        validate=validate.OneOf([e.value for e in GenreEnum]),
+        metadata={'description': '등록할 영상의 카테고리 (video.category와 동일한 값 집합)'}
     )
 
 

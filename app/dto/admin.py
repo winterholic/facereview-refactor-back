@@ -77,7 +77,6 @@ class VideoRequestDto:
     user_name: str
     youtube_url: str
     youtube_full_url: str
-    category: str
     status: str
     admin_comment: Optional[str]
     created_at: str
@@ -90,7 +89,6 @@ class VideoRequestDto:
             'user_name': self.user_name,
             'youtube_url': self.youtube_url,
             'youtube_full_url': self.youtube_full_url,
-            'category': self.category,
             'status': self.status,
             'admin_comment': self.admin_comment,
             'created_at': self.created_at,

@@ -143,7 +143,6 @@ class AdminService:
                 user_name=user.name,
                 youtube_url=video_request.youtube_url,
                 youtube_full_url=video_request.youtube_full_url,
-                category=video_request.category.value if hasattr(video_request.category, 'value') else video_request.category,
                 status=video_request.status,
                 admin_comment=video_request.admin_comment,
                 created_at=video_request.created_at.isoformat(),
@@ -162,7 +161,7 @@ class AdminService:
 
     @staticmethod
     @transactional
-    def approve_video_request(request_id: str, youtube_title: str, channel_name: str, duration: int) -> Dict:
+    def approve_video_request(request_id: str, youtube_title: str, channel_name: str, duration: int, category: str) -> Dict:
         video_request = db.session.query(VideoRequest).filter_by(
             video_request_id=request_id
         ).first()
@@ -180,11 +179,13 @@ class AdminService:
         if existing_video:
             raise BusinessError(APIError.VIDEO_DUPLICATE_URL)
 
+        # NOTE: video_request는 카테고리를 안 가짐(실제 DB에 컬럼 없음, 요청 생성 시점에도 안 받음)
+        #       — 승인하는 관리자가 이 시점에 고르는 값을 그대로 사용.
         new_video = Video(
             youtube_url=video_request.youtube_url,
             title=youtube_title,
             channel_name=channel_name,
-            category=video_request.category,
+            category=GenreEnum(category),
             duration=duration,
             view_count=0,
             is_deleted=0
@@ -361,34 +362,11 @@ class AdminService:
     @staticmethod
     @transactional_readonly
     def get_business_stats() -> Dict:
-        # NOTE(임시 진단): 이 엔드포인트가 원인 불명 500을 내고 있어, 어느 하위 집계가
-        # 실패하는지 특정하기 위해 구간별로 감싸 실제 예외 메시지를 노출한다.
-        # 원인 확정되면 이 try/except들은 제거하고 위 4개 호출을 다시 한 번에 묶을 것.
-        try:
-            signup_trend = AdminService._get_signup_trend(days=7)
-        except Exception as e:
-            raise BusinessError(APIError.DB_ERROR, f"[signup_trend] {type(e).__name__}: {e}")
-
-        try:
-            weekly_active_users = AdminService._get_weekly_active_users()
-        except Exception as e:
-            raise BusinessError(APIError.DB_ERROR, f"[weekly_active_users] {type(e).__name__}: {e}")
-
-        try:
-            video_request_pipeline = AdminService._get_video_request_pipeline()
-        except Exception as e:
-            raise BusinessError(APIError.DB_ERROR, f"[video_request_pipeline] {type(e).__name__}: {e}")
-
-        try:
-            content_health = AdminService._get_content_health()
-        except Exception as e:
-            raise BusinessError(APIError.DB_ERROR, f"[content_health] {type(e).__name__}: {e}")
-
         return BusinessStatsDto(
-            signup_trend=signup_trend,
-            weekly_active_users=weekly_active_users,
-            video_request_pipeline=video_request_pipeline,
-            content_health=content_health,
+            signup_trend=AdminService._get_signup_trend(days=7),
+            weekly_active_users=AdminService._get_weekly_active_users(),
+            video_request_pipeline=AdminService._get_video_request_pipeline(),
+            content_health=AdminService._get_content_health(),
             computed_at=datetime.utcnow().isoformat()
         ).to_dict()
 
