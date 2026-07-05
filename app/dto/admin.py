@@ -257,16 +257,27 @@ class EmotionDistributionDto:
 
 
 @dataclass
+class DominantEmotionCountDto:
+    emotion: str
+    video_count: int
+
+    def to_dict(self):
+        return {'emotion': self.emotion, 'video_count': self.video_count}
+
+
+@dataclass
 class ContentHealthDto:
     avg_completion_rate: float
     emotion_distribution: EmotionDistributionDto
     category_top5: List[CategoryPopularityDto]
+    dominant_emotion_video_counts: List[DominantEmotionCountDto]
 
     def to_dict(self):
         return {
             'avg_completion_rate': self.avg_completion_rate,
             'emotion_distribution': self.emotion_distribution.to_dict(),
-            'category_top5': [c.to_dict() for c in self.category_top5]
+            'category_top5': [c.to_dict() for c in self.category_top5],
+            'dominant_emotion_video_counts': [d.to_dict() for d in self.dominant_emotion_video_counts]
         }
 
 

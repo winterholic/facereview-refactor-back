@@ -29,7 +29,7 @@ from app.dto.admin import (
     AdminCommentDto, AdminCommentListDto,
     SignupTrendPointDto, VideoRequestPipelineDto,
     CategoryPopularityDto, EmotionDistributionDto,
-    ContentHealthDto, BusinessStatsDto,
+    DominantEmotionCountDto, ContentHealthDto, BusinessStatsDto,
 )
 
 # NOTE: WAU는 video_view_log 전체 스캔(created_at 단독 인덱스 없음)이라 매 요청 재계산하지 않고 캐시
@@ -435,23 +435,36 @@ class AdminService:
     def _get_content_health() -> ContentHealthDto:
         # NOTE: youtube_watching_data(세션 원본, 매우 큼)를 매번 스캔하지 않고, watch_frame마다
         #       이미 실시간 갱신되는 video_distribution(영상당 1문서, 작음)에서 바로 평균낸다.
+        # NOTE: 영상 승인 시점(approve_video_request)에 시청 이전부터 emotion_averages가 전부
+        #       0인 문서가 미리 생성됨(total_frames 필드 자체가 없음). 이걸 걸러내지 않고 평균내면
+        #       실제 시청된 영상들의 감정 벡터(항상 합=1)가 0벡터와 섞여 평균 감정분포 합이 100%
+        #       밑으로 처짐 — $match로 실제 시청 프레임이 쌓인 문서만 집계 대상으로 한정.
         try:
-            pipeline = [{
-                '$group': {
-                    '_id': None,
-                    'avg_completion_rate': {'$avg': '$average_completion_rate'},
-                    'avg_neutral': {'$avg': '$emotion_averages.neutral'},
-                    'avg_happy': {'$avg': '$emotion_averages.happy'},
-                    'avg_surprise': {'$avg': '$emotion_averages.surprise'},
-                    'avg_sad': {'$avg': '$emotion_averages.sad'},
-                    'avg_angry': {'$avg': '$emotion_averages.angry'},
-                }
-            }]
-            result = list(mongo_db.video_distribution.aggregate(pipeline))
+            pipeline = [
+                {'$match': {'total_frames': {'$gt': 0}}},
+                {'$facet': {
+                    'averages': [{'$group': {
+                        '_id': None,
+                        'avg_completion_rate': {'$avg': '$average_completion_rate'},
+                        'avg_neutral': {'$avg': '$emotion_averages.neutral'},
+                        'avg_happy': {'$avg': '$emotion_averages.happy'},
+                        'avg_surprise': {'$avg': '$emotion_averages.surprise'},
+                        'avg_sad': {'$avg': '$emotion_averages.sad'},
+                        'avg_angry': {'$avg': '$emotion_averages.angry'},
+                    }}],
+                    'dominant_counts': [
+                        {'$group': {'_id': '$dominant_emotion', 'count': {'$sum': 1}}},
+                        {'$sort': {'count': -1}},
+                    ],
+                }},
+            ]
+            facets = list(mongo_db.video_distribution.aggregate(pipeline))
+            facet = facets[0] if facets else {}
         except Exception:
-            result = []
+            facet = {}
 
-        doc = result[0] if result else {}
+        averages = facet.get('averages') or []
+        doc = averages[0] if averages else {}
         avg_completion_rate = round(doc.get('avg_completion_rate') or 0.0, 4)
         emotion_distribution = EmotionDistributionDto(
             neutral=round(doc.get('avg_neutral') or 0.0, 4),
@@ -460,6 +473,12 @@ class AdminService:
             sad=round(doc.get('avg_sad') or 0.0, 4),
             angry=round(doc.get('avg_angry') or 0.0, 4),
         )
+
+        dominant_emotion_video_counts = [
+            DominantEmotionCountDto(emotion=row['_id'], video_count=row['count'])
+            for row in (facet.get('dominant_counts') or [])
+            if row.get('_id')
+        ]
 
         category_rows = db.session.query(
             Video.category, func.sum(Video.view_count)
@@ -478,7 +497,8 @@ class AdminService:
         return ContentHealthDto(
             avg_completion_rate=avg_completion_rate,
             emotion_distribution=emotion_distribution,
-            category_top5=category_top5
+            category_top5=category_top5,
+            dominant_emotion_video_counts=dominant_emotion_video_counts
         )
 
     @staticmethod

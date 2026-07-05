@@ -281,10 +281,19 @@ class EmotionDistributionSchema(Schema):
     angry = fields.Float(metadata={'description': '분노 평균 비율 (0~1)'})
 
 
+class DominantEmotionCountSchema(Schema):
+    emotion = fields.String(metadata={'description': '지배 감정'})
+    video_count = fields.Integer(metadata={'description': '이 감정이 지배 감정인 영상 수'})
+
+
 class ContentHealthSchema(Schema):
-    avg_completion_rate = fields.Float(metadata={'description': '전체 영상 평균 완주율 (0~1, video_distribution 기준)'})
-    emotion_distribution = fields.Nested(EmotionDistributionSchema, metadata={'description': '전체 시청 감정 분포 평균'})
+    avg_completion_rate = fields.Float(metadata={'description': '전체 영상 평균 완주율 (0~1, video_distribution 기준, 실제 시청 문서만 집계)'})
+    emotion_distribution = fields.Nested(EmotionDistributionSchema, metadata={'description': '전체 시청 감정 분포 평균 (실제 시청 문서만 집계, 합계 = 1)'})
     category_top5 = fields.List(fields.Nested(CategoryPopularitySchema), metadata={'description': '조회수 기준 상위 5개 카테고리'})
+    dominant_emotion_video_counts = fields.List(
+        fields.Nested(DominantEmotionCountSchema),
+        metadata={'description': '지배 감정 기준 영상 수 분포 (평균 강도 대신 대표 감정 빈도)'}
+    )
 
 
 class BusinessStatsResponseSchema(Schema):
