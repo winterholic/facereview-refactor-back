@@ -83,7 +83,7 @@ def get_users(args):
 @admin_blueprint.response(200, DeactivateUserResponseSchema)
 @admin_blueprint.doc(summary="회원 비활성화 (논리 삭제)", security=[{"BearerAuth": []}])
 def deactivate_user(user_id):
-    return AdminService.deactivate_user(user_id)
+    return AdminService.deactivate_user(g.user_id, user_id)
 
 
 @admin_blueprint.route('/users/<user_id>/role', methods=['PATCH'])

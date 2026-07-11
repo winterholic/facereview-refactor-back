@@ -16,6 +16,7 @@ class APIError(Enum):
 
     # 3. 사용자(User) 관련
     USER_NOT_FOUND       = ("U001", "사용자를 찾을 수 없습니다.", 404)
+    USER_FORBIDDEN       = ("U002", "해당 사용자에 대한 권한이 없습니다.", 403)
 
     # 4. 영상(Video) 관련
     VIDEO_NOT_FOUND      = ("V001", "영상을 찾을 수 없습니다.", 404)

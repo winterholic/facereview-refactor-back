@@ -98,10 +98,18 @@ class AdminService:
 
     @staticmethod
     @transactional
-    def deactivate_user(user_id: str) -> Dict:
+    def deactivate_user(actor_user_id: str, user_id: str) -> Dict:
+        actor = db.session.query(User).filter_by(user_id=actor_user_id).first()
+        if not actor:
+            raise BusinessError(APIError.USER_NOT_FOUND)
+
         user = db.session.query(User).filter_by(user_id=user_id).first()
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
+
+        # NOTE: SUPER_ADMIN은 전체 대상 비활성화 가능, ADMIN은 일반(GENERAL) 유저만 가능
+        if actor.role != 'SUPER_ADMIN' and user.role != 'GENERAL':
+            raise BusinessError(APIError.USER_FORBIDDEN, "일반 회원만 비활성화할 수 있습니다.")
 
         user.is_deleted = 1
         db.session.query(Comment).filter_by(user_id=user_id).update({'is_deleted': 1})
