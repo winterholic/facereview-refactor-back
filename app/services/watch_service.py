@@ -161,23 +161,25 @@ class WatchService:
         distribution_repo = VideoDistributionRepository(mongo_db)
 
         current_distribution = distribution_repo.find_by_video_id(video_id)
-        if (not current_distribution) or (current_distribution.dominant_emotion is None):
-            return RecommendedVideoListDto(
-                videos=[],
-                total=0,
-                page=page,
-                size=size,
-                has_next=False
-            )
-
-        current_emotion = current_distribution.dominant_emotion
+        current_emotion = current_distribution.dominant_emotion if current_distribution else None
         current_category = current_video.category
 
-        same_category_videos = db.session.query(Video.video_id, Video.youtube_url, Video.title).filter(
+        same_category_query = db.session.query(
+            Video.video_id, Video.youtube_url, Video.title, Video.view_count, Video.created_at
+        ).filter(
             Video.is_deleted == 0,
             Video.category == current_category,
             Video.video_id != video_id
-        ).all()
+        )
+
+        #NOTE: 현재 영상의 대표 감정이 아직 없으면(표본 부족 등) "같은 카테고리+같은 감정" 교집합이
+        #      항상 비므로, 카테고리만 맞춰 조회수순(동률이면 최신순)으로 폴백 추천한다.
+        if current_emotion:
+            same_category_videos = same_category_query.all()
+        else:
+            same_category_videos = same_category_query.order_by(
+                desc(Video.view_count), desc(Video.created_at)
+            ).all()
 
         if not same_category_videos:
             return RecommendedVideoListDto(
@@ -194,36 +196,62 @@ class WatchService:
             for v in same_category_videos
         }
 
-        mongo_query = {
-            'video_id': {'$in': video_id_list},
-            'dominant_emotion': current_emotion
-        }
+        if current_emotion:
+            mongo_query = {
+                'video_id': {'$in': video_id_list},
+                'dominant_emotion': current_emotion
+            }
 
-        video_distributions = distribution_repo.collection.find(mongo_query)
+            video_distributions = distribution_repo.collection.find(mongo_query)
 
-        scored_videos = []
-        for dist_doc in video_distributions:
-            vid = dist_doc['video_id']
+            scored_videos = []
+            for dist_doc in video_distributions:
+                vid = dist_doc['video_id']
 
-            if vid not in video_info_dict:
-                continue
+                if vid not in video_info_dict:
+                    continue
 
-            rec_scores = dist_doc.get('recommendation_scores', {})
-            emotion_score = rec_scores.get(current_emotion, 0.0)
+                rec_scores = dist_doc.get('recommendation_scores', {})
+                emotion_score = rec_scores.get(current_emotion, 0.0)
 
-            emotion_averages = dist_doc.get('emotion_averages', {})
-            emotion_per = emotion_averages.get(current_emotion, 0.0) * 100.0
+                emotion_averages = dist_doc.get('emotion_averages', {})
+                emotion_per = emotion_averages.get(current_emotion, 0.0) * 100.0
 
-            scored_videos.append({
-                'video_id': vid,
-                'youtube_url': video_info_dict[vid]['youtube_url'],
-                'title': video_info_dict[vid]['title'],
-                'dominant_emotion': current_emotion,
-                'dominant_emotion_per': round(emotion_per, 2),
-                'score': emotion_score
-            })
+                scored_videos.append({
+                    'video_id': vid,
+                    'youtube_url': video_info_dict[vid]['youtube_url'],
+                    'title': video_info_dict[vid]['title'],
+                    'dominant_emotion': current_emotion,
+                    'dominant_emotion_per': round(emotion_per, 2),
+                    'score': emotion_score
+                })
 
-        scored_videos.sort(key=lambda x: x['score'], reverse=True)
+            scored_videos.sort(key=lambda x: x['score'], reverse=True)
+        else:
+            #NOTE: 조회수/최신순 폴백 — same_category_videos가 이미 SQL에서 정렬돼 있으므로
+            #      그 순서를 그대로 유지한다(재정렬 없음). 배지 표시용 감정 정보는 있으면 붙이고
+            #      없으면 None/0.0으로 둬 프론트의 기존 "시청기록 없음" 빈 상태로 자연스럽게 처리.
+            dist_map = {
+                doc['video_id']: doc
+                for doc in distribution_repo.collection.find({'video_id': {'$in': video_id_list}})
+            }
+
+            scored_videos = []
+            for v in same_category_videos:
+                dist_doc = dist_map.get(v.video_id)
+                dominant = dist_doc.get('dominant_emotion') if dist_doc else None
+                dominant_per = 0.0
+                if dist_doc and dominant:
+                    emotion_averages = dist_doc.get('emotion_averages', {})
+                    dominant_per = round(emotion_averages.get(dominant, 0.0) * 100.0, 2)
+
+                scored_videos.append({
+                    'video_id': v.video_id,
+                    'youtube_url': video_info_dict[v.video_id]['youtube_url'],
+                    'title': video_info_dict[v.video_id]['title'],
+                    'dominant_emotion': dominant,
+                    'dominant_emotion_per': dominant_per
+                })
 
         total = len(scored_videos)
         start_idx = (page - 1) * size
