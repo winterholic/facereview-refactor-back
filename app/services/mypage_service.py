@@ -344,13 +344,11 @@ class MypageService:
 
         repo = YoutubeWatchingDataRepository(mongo_db)
 
-        #NOTE: most_emotion_timeline(세션당 최대 초당10프레임 dict)을 projection에서 빼면
-        #      _build_emotion_summary_from_docs가 자동으로 emotion_percentages*추정시청초
-        #      폴백 경로를 타 유저 누적 시청량(T)에 비례하던 연산이 세션 수(N)로 줄어듦.
-        #      get_highlight(:376)가 이미 쓰던 것과 동일 최적화 — docs/problem.md §3 참고.
+        #NOTE: 0.1초 프레임을 고유 초 단위로 묶어 예전 도넛 시간 의미를 유지
         docs = list(repo.collection.find(
             {'user_id': user_id},
             {
+                'most_emotion_timeline': 1,
                 'emotion_percentages': 1,
                 'duration': 1,
                 'completion_rate': 1,
