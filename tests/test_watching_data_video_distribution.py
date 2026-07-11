@@ -73,6 +73,25 @@ class UpdateVideoDistributionMinFramesTest(unittest.TestCase):
 
         self.assertEqual(dist_repo.upserted.dominant_emotion, 'neutral')
 
+    def test_dominant_emotion_uses_raw_average_not_weighted_score(self):
+        #NOTE: happy(25%)가 raw 1위인데 고정 가중치(surprise*4 vs happy*3)로 뽑으면
+        #      surprise(21%*4=0.84 > 25%*3=0.75)가 이겨버리던 실제 버그 재현 케이스
+        timeline = {str(i): [0, 0, 0, 0, 0] for i in range(30)}
+        sessions = [
+            _FakeWatchingData(
+                emotion_percentages=_FakeEmotionPercentages(
+                    neutral=16.0, happy=25.0, surprise=21.0, sad=16.0, angry=22.0
+                ),
+                completion_rate=0.5,
+                emotion_score_timeline=timeline
+            ),
+        ]
+        dist_repo = _FakeDistRepo()
+
+        WatchingDataService._update_video_distribution(dist_repo, _FakeWatchingRepo(sessions), 'v3')
+
+        self.assertEqual(dist_repo.upserted.dominant_emotion, 'happy')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -243,18 +243,24 @@ class WatchingDataService:
                 angry=round(emotion_averages.angry * 3, 3)
             )
 
-            scores_dict = {
-                'neutral': recommendation_scores.neutral,
-                'happy': recommendation_scores.happy,
-                'surprise': recommendation_scores.surprise,
-                'sad': recommendation_scores.sad,
-                'angry': recommendation_scores.angry
+            #NOTE: dominant_emotion은 raw emotion_averages 기준 최댓값이어야 화면에 노출되는
+            #      dominant_emotion_per(emotion_averages[dominant_emotion])와 항상 일치함
+            #      (video_distribution._recalculate_scores와 동일 원칙). recommendation_scores
+            #      (고정 가중치 neutral*2/happy*3/surprise*4/sad*3/angry*3)로 뽑으면 raw 1위가
+            #      아닌 감정이 dominant로 노출될 수 있음 — 실측 확인: happy raw 25%인데 surprise
+            #      raw 21%*4=0.84 > happy 25%*3=0.75로 surprise가 뽑히던 실제 오류.
+            averages_dict = {
+                'neutral': emotion_averages.neutral,
+                'happy': emotion_averages.happy,
+                'surprise': emotion_averages.surprise,
+                'sad': emotion_averages.sad,
+                'angry': emotion_averages.angry
             }
             #NOTE: 여기서의 count는 세션 수일 뿐 실제 신뢰도는 세션들이 관찰한 총 프레임 수로 판단해야 함
             #      (video_distribution._recalculate_scores와 동일한 MIN_RELIABLE_FRAMES 게이트를 여기도 적용)
             total_frames_observed = sum(len(wd.emotion_score_timeline) for wd in all_watching_data)
             dominant_emotion = (
-                max(scores_dict, key=scores_dict.get)
+                max(averages_dict, key=averages_dict.get)
                 if total_frames_observed >= MIN_RELIABLE_FRAMES else None
             )
 
