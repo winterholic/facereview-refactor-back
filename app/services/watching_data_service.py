@@ -2,7 +2,7 @@ from typing import Dict, List
 from datetime import datetime
 import common.extensions as extensions
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages, ClientInfo
-from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
+from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository, MIN_RELIABLE_FRAMES
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
 from common.utils.logging_utils import get_logger
 
@@ -250,7 +250,13 @@ class WatchingDataService:
                 'sad': recommendation_scores.sad,
                 'angry': recommendation_scores.angry
             }
-            dominant_emotion = max(scores_dict, key=scores_dict.get)
+            #NOTE: 여기서의 count는 세션 수일 뿐 실제 신뢰도는 세션들이 관찰한 총 프레임 수로 판단해야 함
+            #      (video_distribution._recalculate_scores와 동일한 MIN_RELIABLE_FRAMES 게이트를 여기도 적용)
+            total_frames_observed = sum(len(wd.emotion_score_timeline) for wd in all_watching_data)
+            dominant_emotion = (
+                max(scores_dict, key=scores_dict.get)
+                if total_frames_observed >= MIN_RELIABLE_FRAMES else None
+            )
 
             video_distribution = VideoDistribution(
                 video_id=video_id,

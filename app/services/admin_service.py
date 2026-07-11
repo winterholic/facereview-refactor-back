@@ -209,7 +209,7 @@ class AdminService:
             average_completion_rate=0.0,
             emotion_averages=EmotionAverages(),
             recommendation_scores=RecommendationScores(),
-            dominant_emotion='neutral',
+            dominant_emotion=None,
             updated_at=datetime.utcnow()
         )
         distribution_repo.upsert(initial_distribution)
