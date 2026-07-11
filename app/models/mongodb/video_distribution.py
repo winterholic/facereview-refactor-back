@@ -7,6 +7,10 @@ logger = get_logger('video_distribution')
 
 EMOTION_LABELS = ["neutral", "happy", "surprise", "sad", "angry"]
 
+# NOTE: 0.5초 간격 샘플링 기준 30프레임(실시청 15초) 미만이면 dominant_emotion 비율이
+#       한두 프레임의 우연으로 100%까지 튈 수 있어(통계적으로 무의미) 신뢰하지 않음.
+MIN_RELIABLE_FRAMES = 30
+
 # NOTE: 카테고리별 감정 가중치 (recommendation_scores·dominant_emotion 계산용)
 CATEGORY_WEIGHTS = {
     'drama': {'neutral': 0.5, 'happy': 2.5, 'surprise': 2.0, 'sad': 3.0, 'angry': 2.0},
@@ -221,7 +225,12 @@ class VideoDistributionRepository:
 
         # NOTE: dominant_emotion은 raw emotion_averages 기준 최댓값 (화면에 노출되는 그래프/퍼센트와 항상 일치해야 함)
         #       recommendation_scores(카테고리 가중치)는 watch_service의 동일감정 내 랭킹 정렬 용도로만 사용
-        dominant_emotion = max(emotion_averages, key=emotion_averages.get)
+        #       단, total_frames가 MIN_RELIABLE_FRAMES 미만이면 표본이 통계적으로 무의미하므로
+        #       dominant_emotion을 확정하지 않음(None) — 프론트가 기존 "시청기록 없음" 상태로 자연스럽게 처리
+        dominant_emotion = (
+            max(emotion_averages, key=emotion_averages.get)
+            if total_frames >= MIN_RELIABLE_FRAMES else None
+        )
 
         # NOTE: average_completion_rate 계산 (0.5초 간격이므로 duration * 2가 완주 프레임 수)
         average_completion_rate = 0.0

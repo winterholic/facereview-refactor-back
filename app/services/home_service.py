@@ -89,7 +89,9 @@ class HomeService:
                 if not video_distribution:
                     continue
 
-                dominant_emotion = video_distribution.dominant_emotion or 'neutral'
+                #NOTE: dominant_emotion이 None이면 표본 부족(MIN_RELIABLE_FRAMES 미만)으로 아직 신뢰 불가한 상태
+                #      — 'neutral'로 임의 대체하면 신뢰 게이트가 무력화되므로 그대로 None/0.0 유지
+                dominant_emotion = video_distribution.dominant_emotion
                 emotion_averages_dict = {
                     'neutral': video_distribution.emotion_averages.neutral,
                     'happy': video_distribution.emotion_averages.happy,
@@ -97,7 +99,10 @@ class HomeService:
                     'sad': video_distribution.emotion_averages.sad,
                     'angry': video_distribution.emotion_averages.angry
                 }
-                dominant_emotion_per = round(emotion_averages_dict.get(dominant_emotion, 0.0) * 100.0, 2)
+                dominant_emotion_per = (
+                    round(emotion_averages_dict.get(dominant_emotion, 0.0) * 100.0, 2)
+                    if dominant_emotion else 0.0
+                )
 
                 video_dto_list.append(BaseVideoDataDto(
                     video_id=video.video_id,
