@@ -9,7 +9,7 @@
 </p>
 
 | 구분 | URL |
-|:---:|---|
+|:---:|:---:|
 | 서비스 | [https://facereview.net](https://facereview.net) |
 | 관리자 | [https://admin.facereview.net](https://admin.facereview.net) |
 | 프로젝트 소개 | [https://portfolio.facereview.net](https://portfolio.facereview.net) |
