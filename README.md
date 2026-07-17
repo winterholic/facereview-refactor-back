@@ -8,13 +8,11 @@
   <strong>표정이 남긴 감정으로 다음 영상을 발견하는 비디오 추천 서비스</strong>
 </p>
 
-<p align="center">
-  <a href="https://facereview.net">서비스</a>
-  ·
-  <a href="https://admin.facereview.net">관리자</a>
-  ·
-  <a href="https://portfolio.facereview.net">프로젝트 소개</a>
-</p>
+| 구분 | URL |
+|:---:|---|
+| 서비스 | [https://facereview.net](https://facereview.net) |
+| 관리자 | [https://admin.facereview.net](https://admin.facereview.net) |
+| 프로젝트 소개 | [https://portfolio.facereview.net](https://portfolio.facereview.net) |
 
 <p align="center">2023.10 – 2023.12 · Team Project</p>
 
