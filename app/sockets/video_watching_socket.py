@@ -25,7 +25,7 @@ _emotion_analyzer = None
 #NOTE: WatchingDataCache 싱글톤 인스턴스
 watching_cache = WatchingDataCache()
 
-#TODO: Socket.IO handshake JWT 인증을 도입한 뒤 message.user_id 대신 서버가 확인한 사용자 ID를 사용한다.
+#TODO: 보안 우려가 커지면 Socket.IO를 JWT 기반 인증으로 전환하고 클라이언트의 user_id를 신뢰하지 않는다.
 
 
 def get_emotion_analyzer():
