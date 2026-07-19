@@ -72,6 +72,7 @@ common/
 - `routes/` Blueprint에서 요청 수신 → `services/` 정적 메서드 호출 → DTO 딕셔너리 반환
 - `@login_required` → `@admin_required` → `@blueprint.arguments` → `@blueprint.response` 데코레이터 순서 유지
 - `@transactional`: MySQL 커밋/롤백 자동 처리. 쓰기 작업에 사용
+- `@union_transactional`: MariaDB와 MongoDB를 함께 쓰는 작업에 사용. MongoDB Repository가 등록한 보상 작업을 역순 실행
 - `@transactional_readonly`: 읽기 전용 쿼리에 사용
 
 ### 라우터 규칙

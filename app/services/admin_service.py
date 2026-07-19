@@ -7,7 +7,11 @@ from flask import current_app
 from sqlalchemy import desc, func, or_, text
 
 from common.extensions import db, mongo_client, mongo_db, redis_client
-from common.decorator.db_decorators import transactional, transactional_readonly
+from common.decorator.db_decorators import (
+    transactional,
+    transactional_readonly,
+    union_transactional,
+)
 from common.exception.exceptions import BusinessError
 from common.enum.error_code import APIError
 from common.enum.youtube_genre import GenreEnum
@@ -19,6 +23,10 @@ from app.models.comment import Comment
 from app.models.video_like import VideoLike
 from app.models.video_view_log import VideoViewLog
 from app.models.mongodb.video_distribution import VideoDistributionRepository, VideoDistribution, EmotionAverages, RecommendationScores
+from app.models.mongodb.video_timeline_emotion_count import (
+    VideoTimelineEmotionCount,
+    VideoTimelineEmotionCountRepository,
+)
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages
 
 from app.dto.admin import (
@@ -168,7 +176,7 @@ class AdminService:
         return result_dto.to_dict()
 
     @staticmethod
-    @transactional
+    @union_transactional
     def approve_video_request(request_id: str, youtube_title: str, channel_name: str, duration: int, category: str) -> Dict:
         video_request = db.session.query(VideoRequest).filter_by(
             video_request_id=request_id
@@ -213,6 +221,9 @@ class AdminService:
             updated_at=datetime.utcnow()
         )
         distribution_repo.upsert(initial_distribution)
+
+        timeline_repo = VideoTimelineEmotionCountRepository(_mongo_db)
+        timeline_repo.upsert(VideoTimelineEmotionCount(video_id=new_video.video_id))
 
         video_request.status = 'ACCEPTED'
         db.session.flush()
@@ -645,15 +656,33 @@ class AdminService:
         }
 
     @staticmethod
+    @union_transactional
+    def _save_dummy_session(
+        watching_data: YoutubeWatchingData,
+        view_log: VideoViewLog,
+    ) -> str:
+        watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
+        video_dist_repo = VideoDistributionRepository(mongo_db)
+
+        watching_data_repo.insert(watching_data)
+        db.session.add(view_log)
+
+        # NOTE: 파생 분포도 같은 경계에서 갱신해야 실패 시 이전 값으로 복구된다.
+        from app.services.watching_data_service import WatchingDataService
+        WatchingDataService._update_video_distribution(
+            video_dist_repo,
+            watching_data_repo,
+            watching_data.video_id,
+        )
+        return watching_data.video_id
+
+    @staticmethod
     def generate_dummy_data(user_id: str, count: int = 30) -> dict:
         all_videos = Video.query.filter(Video.is_deleted == 0, Video.duration > 0).all()
         if not all_videos:
             raise BusinessError(APIError.VIDEO_NOT_FOUND, "더미 데이터를 생성할 영상이 없습니다.")
 
         videos = random.sample(all_videos, min(count, len(all_videos)))
-
-        watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
-        video_dist_repo = VideoDistributionRepository(mongo_db)
 
         created_video_ids = []
 
@@ -693,8 +722,6 @@ class AdminService:
                     most_emotion_timeline=most_emotion_timeline,
                     emotion_score_timeline=emotion_score_timeline,
                 )
-                watching_data_repo.insert(watching_data)
-
                 view_log = VideoViewLog(
                     video_view_log_id=video_view_log_id,
                     user_id=user_id,
@@ -702,17 +729,11 @@ class AdminService:
                     created_at=created_at,
                     updated_at=created_at,
                 )
-                db.session.add(view_log)
-                db.session.commit()
-
-                #NOTE: youtube_watching_data 삽입 후 video_distribution 재계산
-                from app.services.watching_data_service import WatchingDataService
-                WatchingDataService._update_video_distribution(video_dist_repo, watching_data_repo, video.video_id)
-
-                created_video_ids.append(video.video_id)
+                created_video_ids.append(
+                    AdminService._save_dummy_session(watching_data, view_log)
+                )
 
             except Exception as e:
-                db.session.rollback()
                 current_app.logger.error(f"[dummy] video_id={video.video_id} 생성 실패: {e}")
                 continue
 

@@ -149,7 +149,13 @@ class YoutubeWatchingDataRepository:
         }
 
         if hasattr(g, 'saga_context'):
-            g.saga_context.save_result(f'insert_watching_data_{watching_data.video_view_log_id}', compensation_data)
+            step_name = f'insert_watching_data_{watching_data.video_view_log_id}'
+            g.saga_context.save_result(step_name, compensation_data)
+            g.saga_context.add_compensation(
+                step_name,
+                self.compensate_insert,
+                compensation_data,
+            )
 
         return compensation_data
 
@@ -218,7 +224,13 @@ class YoutubeWatchingDataRepository:
         }
 
         if hasattr(g, 'saga_context'):
-            g.saga_context.save_result(f'delete_watching_data_{video_view_log_id}', compensation_data)
+            step_name = f'delete_watching_data_{video_view_log_id}'
+            g.saga_context.save_result(step_name, compensation_data)
+            g.saga_context.add_compensation(
+                step_name,
+                self.compensate_delete,
+                compensation_data,
+            )
 
         return compensation_data
 

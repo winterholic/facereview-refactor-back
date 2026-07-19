@@ -5,6 +5,7 @@ from flask import current_app
 from sqlalchemy import func
 
 from common.extensions import db
+from common.decorator.db_decorators import union_transactional
 from common.enum.youtube_genre import GenreEnum
 from common.utils.logging_utils import get_logger
 
@@ -153,11 +154,41 @@ class YoutubeCategoryFillJob:
 
         return results
 
+    @union_transactional
+    def _save_video(self, video_data: Dict, target_category: GenreEnum) -> str:
+        from app.models.video import Video
+        from app.models.mongodb.video_distribution import (
+            VideoDistribution,
+            VideoDistributionRepository,
+        )
+        from app.models.mongodb.video_timeline_emotion_count import (
+            VideoTimelineEmotionCount,
+            VideoTimelineEmotionCountRepository,
+        )
+        from common.extensions import mongo_db
+
+        video = Video(
+            youtube_url=video_data['youtube_id'],
+            title=video_data['title'][:255],
+            channel_name=video_data['channel_name'][:100],
+            category=target_category,
+            duration=video_data['duration'],
+            view_count=0,
+            is_deleted=0,
+        )
+        db.session.add(video)
+        db.session.flush()
+
+        VideoDistributionRepository(mongo_db).upsert(
+            VideoDistribution(video_id=video.video_id)
+        )
+        VideoTimelineEmotionCountRepository(mongo_db).upsert(
+            VideoTimelineEmotionCount(video_id=video.video_id)
+        )
+        return video.video_id
+
     def _save_videos(self, video_list: List[Dict], target_category: GenreEnum) -> int:
         from app.models.video import Video
-        from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
-        from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
-        from common.extensions import mongo_db
 
         if not video_list:
             return 0
@@ -169,28 +200,13 @@ class YoutubeCategoryFillJob:
             ).all()
         }
 
-        dist_repo = VideoDistributionRepository(mongo_db)
-        timeline_repo = VideoTimelineEmotionCountRepository(mongo_db)
         saved = 0
 
         for vd in video_list:
             if vd['youtube_id'] in existing_ids:
                 continue
             try:
-                video = Video(
-                    youtube_url=vd['youtube_id'],
-                    title=vd['title'][:255],
-                    channel_name=vd['channel_name'][:100],
-                    category=target_category,
-                    duration=vd['duration'],
-                    view_count=0,
-                    is_deleted=0,
-                )
-                db.session.add(video)
-                db.session.flush()
-
-                dist_repo.upsert(VideoDistribution(video_id=video.video_id))
-                timeline_repo.upsert(VideoTimelineEmotionCount(video_id=video.video_id))
+                self._save_video(vd, target_category)
                 saved += 1
 
             except Exception as e:
@@ -260,7 +276,6 @@ class YoutubeCategoryFillJob:
                     f"(기존 {current_count} → 약 {current_count + genre_saved}개)"
                 )
 
-            db.session.commit()
             logger.info(
                 f"카테고리 보충 완료: 총 {total_saved}개 저장 | "
                 f"search 호출 {search_calls}회 | 총 quota 사용 {self.quota_used}"

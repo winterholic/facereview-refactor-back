@@ -1,7 +1,13 @@
-from .saga_orchestrator import SagaOrchestrator, SagaContext, SagaStepDefinition
+from .saga_orchestrator import (
+    SagaCompensationError,
+    SagaContext,
+    SagaOrchestrator,
+    SagaStepDefinition,
+)
 
 __all__ = [
     'SagaOrchestrator',
     'SagaContext',
-    'SagaStepDefinition'
+    'SagaStepDefinition',
+    'SagaCompensationError',
 ]

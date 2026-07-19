@@ -22,6 +22,21 @@ class SagaStepDefinition:
     extract_compensation_data: Optional[Callable] = None
 
 
+@dataclass
+class CompensationAction:
+    name: str
+    compensate: Callable
+    data: Any
+
+
+class SagaCompensationError(RuntimeError):
+    def __init__(self, transaction_id: str, failures: List[Tuple[str, Exception]]):
+        self.transaction_id = transaction_id
+        self.failures = failures
+        names = ', '.join(name for name, _ in failures)
+        super().__init__(f"Saga 보상 실패: transaction_id={transaction_id}, steps={names}")
+
+
 class SagaOrchestrator:
 
     def __init__(
@@ -155,10 +170,30 @@ class SagaContext:
 
     def __init__(self, transaction_id: str):
         self.transaction_id = transaction_id
-        self.step_results: Dict[str, Any] = {}  # 각 단계의 결과 저장
+        self.step_results: Dict[str, Any] = {}
+        self.compensations: List[CompensationAction] = []
 
     def save_result(self, step_name: str, result: Any):
         self.step_results[step_name] = result
 
     def get_result(self, step_name: str) -> Any:
         return self.step_results.get(step_name)
+
+    def add_compensation(self, name: str, compensate: Callable, data: Any):
+        self.compensations.append(CompensationAction(name, compensate, data))
+
+    def compensate_all(self):
+        failures = []
+        actions = list(reversed(self.compensations))
+        self.compensations.clear()
+
+        for action in actions:
+            try:
+                action.compensate(action.data)
+                logger.info(f"Saga 보상 완료: {action.name}")
+            except Exception as error:
+                logger.critical(f"Saga 보상 실패: {action.name}, error={error}", exc_info=True)
+                failures.append((action.name, error))
+
+        if failures:
+            raise SagaCompensationError(self.transaction_id, failures)

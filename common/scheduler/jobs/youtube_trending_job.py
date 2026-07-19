@@ -5,6 +5,7 @@ from flask import current_app
 from common.utils.logging_utils import get_logger
 
 from common.extensions import db
+from common.decorator.db_decorators import union_transactional
 from common.enum.youtube_genre import GenreEnum
 
 logger = get_logger('youtube_trending_job')
@@ -142,12 +143,48 @@ class YoutubeTrendingJob:
 
         return mapped_category
 
+    @union_transactional
+    def _save_video(self, video_data: Dict) -> str:
+        from app.models.video import Video
+        from app.models.mongodb.video_distribution import (
+            VideoDistribution,
+            VideoDistributionRepository,
+        )
+        from app.models.mongodb.video_timeline_emotion_count import (
+            VideoTimelineEmotionCount,
+            VideoTimelineEmotionCountRepository,
+        )
+        from common.extensions import mongo_db
+
+        category = self._map_youtube_category(
+            youtube_category_id=video_data['category_id'],
+            title=video_data['title'],
+            tags=video_data['tags'],
+            description=video_data['description'],
+        )
+        video = Video(
+            youtube_url=video_data['youtube_id'],
+            title=video_data['title'][:255],
+            channel_name=video_data['channel_name'][:100],
+            category=category,
+            duration=video_data['duration'],
+            view_count=0,
+            is_deleted=0,
+        )
+        db.session.add(video)
+        db.session.flush()
+
+        VideoDistributionRepository(mongo_db).upsert(
+            VideoDistribution(video_id=video.video_id)
+        )
+        VideoTimelineEmotionCountRepository(mongo_db).upsert(
+            VideoTimelineEmotionCount(video_id=video.video_id)
+        )
+        return video.video_id
+
     def execute(self):
         try:
             from app.models.video import Video
-            from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
-            from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
-            from common.extensions import mongo_db
 
             self.api_key = current_app.config.get('YOUTUBE_API_KEY')
             if not self.api_key:
@@ -177,53 +214,19 @@ class YoutubeTrendingJob:
             logger.info(f"전체 {len(all_videos)}개 중 신규 {len(new_videos)}개 발견")
 
             saved_count = 0
-            mongo_saved_count = 0
-
-            video_dist_repo = VideoDistributionRepository(mongo_db)
-            timeline_repo = VideoTimelineEmotionCountRepository(mongo_db)
 
             for video_data in new_videos:
                 try:
-                    category = self._map_youtube_category(
-                        youtube_category_id=video_data['category_id'],
-                        title=video_data['title'],
-                        tags=video_data['tags'],
-                        description=video_data['description']
-                    )
-
-                    new_video = Video(
-                        youtube_url=video_data['youtube_id'],
-                        title=video_data['title'][:255],
-                        channel_name=video_data['channel_name'][:100],
-                        category=category,
-                        duration=video_data['duration'],
-                        view_count=0,
-                        is_deleted=0
-                    )
-
-                    db.session.add(new_video)
-                    db.session.flush()
-
-                    video_distribution = VideoDistribution(
-                        video_id=new_video.video_id
-                    )
-                    video_dist_repo.upsert(video_distribution)
-
-                    timeline_emotion = VideoTimelineEmotionCount(
-                        video_id=new_video.video_id
-                    )
-                    timeline_repo.upsert(timeline_emotion)
-
+                    self._save_video(video_data)
                     saved_count += 1
-                    mongo_saved_count += 1
 
                 except Exception as e:
                     logger.error(f"동영상 저장 오류 ({video_data['youtube_id']}): {str(e)}")
                     continue
 
-            db.session.commit()
-
-            logger.info(f"YouTube 인기 동영상 수집 완료: MySQL {saved_count}개, MongoDB {mongo_saved_count}개 저장")
+            logger.info(
+                f"YouTube 인기 동영상 수집 완료: MariaDB/MongoDB {saved_count}개 저장"
+            )
 
         except Exception as e:
             db.session.rollback()

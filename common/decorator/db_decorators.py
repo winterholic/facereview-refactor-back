@@ -1,7 +1,11 @@
 from functools import wraps
 from flask import g
 from common.extensions import db, mongo_db
-from common.saga.saga_orchestrator import SagaOrchestrator, SagaContext
+from common.saga.saga_orchestrator import (
+    SagaCompensationError,
+    SagaContext,
+    SagaOrchestrator,
+)
 from app.models.mongodb.saga_transaction_log import SagaTransactionLogRepository
 from common.utils.logging_utils import get_logger
 import uuid
@@ -17,8 +21,6 @@ def union_transactional(func):
         saga_context = SagaContext(transaction_id)
         g.saga_context = saga_context
 
-        g.rdb_operations = []
-
         try:
             result = func(*args, **kwargs)
 
@@ -27,20 +29,24 @@ def union_transactional(func):
             logger.info(f"트랜잭션 커밋 완료: {transaction_id}")
             return result
 
-        except Exception as e:
-            logger.error(f"트랜잭션 실패: {transaction_id}, error={e}")
+        except Exception as error:
+            logger.error(f"트랜잭션 실패: {transaction_id}, error={error}")
 
-            db.session.rollback()
+            try:
+                db.session.rollback()
+            except Exception:
+                logger.critical(f"MariaDB 롤백 실패: {transaction_id}", exc_info=True)
 
-            #NOTE: MongoDB 작업들은 각 Repository에서 자동으로 보상됨
+            try:
+                saga_context.compensate_all()
+            except SagaCompensationError as compensation_error:
+                raise compensation_error from error
 
             raise
 
         finally:
             if hasattr(g, 'saga_context'):
                 delattr(g, 'saga_context')
-            if hasattr(g, 'rdb_operations'):
-                delattr(g, 'rdb_operations')
 
     return wrapper
 
