@@ -60,6 +60,8 @@ class WatchingDataService:
             emotion_percentages=emotion_percentages,
             most_emotion_timeline=existing.most_emotion_timeline,
             emotion_score_timeline=existing.emotion_score_timeline,
+            emotion_seconds=existing.emotion_seconds,
+            finalized_at=existing.finalized_at,
             client_info=client_info
         )
 

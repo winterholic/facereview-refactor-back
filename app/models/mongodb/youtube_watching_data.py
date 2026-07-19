@@ -2,6 +2,11 @@ from datetime import datetime
 from typing import Dict, Optional, Any
 from dataclasses import dataclass, field
 from common.utils.logging_utils import get_logger
+from common.utils.emotion_summary import (
+    build_emotion_seconds_from_timeline,
+    build_finalized_session_query,
+    empty_emotion_seconds,
+)
 
 logger = get_logger('youtube_watching_data')
 
@@ -60,6 +65,10 @@ class YoutubeWatchingData:
 
     emotion_score_timeline: Dict[str, list] = field(default_factory=dict)
 
+    emotion_seconds: Dict[str, int] = field(default_factory=empty_emotion_seconds)
+
+    finalized_at: Optional[datetime] = None
+
     client_info: ClientInfo = field(default_factory=ClientInfo)
 
     def to_dict(self) -> Dict:
@@ -73,6 +82,8 @@ class YoutubeWatchingData:
             'emotion_percentages': self.emotion_percentages.to_dict(),
             'most_emotion_timeline': self.most_emotion_timeline,
             'emotion_score_timeline': self.emotion_score_timeline,
+            'emotion_seconds': self.emotion_seconds,
+            'finalized_at': self.finalized_at,
             'client_info': self.client_info.to_dict()
         }
 
@@ -92,6 +103,8 @@ class YoutubeWatchingData:
             emotion_percentages=EmotionPercentages(**emotion_pct) if emotion_pct else EmotionPercentages(),
             most_emotion_timeline=data.get('most_emotion_timeline', {}),
             emotion_score_timeline=data.get('emotion_score_timeline', {}),
+            emotion_seconds=data.get('emotion_seconds', empty_emotion_seconds()),
+            finalized_at=data.get('finalized_at'),
             client_info=ClientInfo(
                 ip_address=client_data.get('ip_address'),
                 user_agent=client_data.get('user_agent'),
@@ -118,6 +131,11 @@ class YoutubeWatchingDataRepository:
     def ensure_indexes(cls, db):
         collection = db[cls.COLLECTION_NAME]
         collection.create_index([('user_id', 1), ('created_at', -1)])
+        collection.create_index([
+            ('user_id', 1),
+            ('finalized_at', 1),
+            ('video_view_log_id', 1),
+        ])
         collection.create_index([('video_id', 1), ('created_at', -1)])
         collection.create_index('video_view_log_id', unique=True)
 
@@ -158,6 +176,27 @@ class YoutubeWatchingDataRepository:
         ).sort('created_at', -1).limit(limit)
 
         return list(docs)
+
+    def find_finalized_emotion_summaries_since(
+        self,
+        user_id: str,
+        checkpoint_at: Optional[datetime] = None,
+        checkpoint_session_id: Optional[str] = None,
+    ):
+        query = build_finalized_session_query(
+            user_id, checkpoint_at, checkpoint_session_id
+        )
+        projection = {
+            'emotion_score_timeline': 0,
+            'most_emotion_timeline': 0,
+            'client_info': 0,
+        }
+        return list(
+            self.collection.find(query, projection).sort([
+                ('finalized_at', 1),
+                ('video_view_log_id', 1),
+            ])
+        )
 
     def find_by_video_id(self, video_id: str, limit: int = 100):
         docs = self.collection.find(
@@ -283,6 +322,12 @@ class YoutubeWatchingDataRepository:
     def finalize(self, watching_data: 'YoutubeWatchingData') -> Dict[str, any]:
         from flask import g
 
+        # 재시도 때 종료 시각이 바뀌면 같은 세션이 신규 증분으로 다시 합산된다.
+        finalized_at = watching_data.finalized_at or datetime.utcnow()
+        emotion_seconds = build_emotion_seconds_from_timeline(
+            watching_data.most_emotion_timeline
+        )
+
         result = self.collection.update_one(
             {'video_view_log_id': watching_data.video_view_log_id},
             {
@@ -292,6 +337,8 @@ class YoutubeWatchingDataRepository:
                     'completion_rate': watching_data.completion_rate,
                     'most_emotion_timeline': watching_data.most_emotion_timeline,
                     'emotion_score_timeline': watching_data.emotion_score_timeline,
+                    'emotion_seconds': emotion_seconds,
+                    'finalized_at': finalized_at,
                     'client_info': watching_data.client_info.to_dict(),
                     'updated_at': datetime.utcnow()
                 },

@@ -41,6 +41,29 @@ class EmotionSummaryTest(unittest.TestCase):
         self.assertEqual(result['emotion_seconds']['sad'], 20)
         self.assertEqual(result['emotion_percentages']['happy'], 60.0)
 
+    def test_sums_precomputed_session_emotion_seconds(self):
+        docs = [
+            {
+                'emotion_seconds': {
+                    'neutral': 10, 'happy': 5, 'surprise': 0,
+                    'sad': 0, 'angry': 0,
+                }
+            },
+            {
+                'emotion_seconds': {
+                    'neutral': 2, 'happy': 0, 'surprise': 3,
+                    'sad': 0, 'angry': 0,
+                }
+            },
+        ]
+
+        result = _build_emotion_summary_from_docs(docs)
+
+        self.assertEqual(result['emotion_seconds']['neutral'], 12)
+        self.assertEqual(result['emotion_seconds']['happy'], 5)
+        self.assertEqual(result['emotion_seconds']['surprise'], 3)
+        self.assertEqual(result['emotion_percentages']['neutral'], 60.0)
+
 
 if __name__ == '__main__':
     unittest.main()

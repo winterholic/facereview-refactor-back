@@ -33,6 +33,7 @@ from app.models.video_like import VideoLike
 from app.models.video_bookmark import VideoBookmark
 from app.models.comment import Comment
 from app.models.user_emotion_dna import UserEmotionDna
+from app.models.user_emotion_summary import UserEmotionSummary
 
 # MongoDB Models
 from app.models.mongodb import (
@@ -56,6 +57,7 @@ __all__ = [
     'VideoBookmark',
     'Comment',
     'UserEmotionDna',
+    'UserEmotionSummary',
 
     # MongoDB Models
     'VideoDistribution',

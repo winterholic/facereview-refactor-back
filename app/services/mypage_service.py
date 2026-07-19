@@ -3,6 +3,7 @@ import datetime as dt
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from flask import current_app
+from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
 from common.extensions import db, redis_client, mongo_db
@@ -31,6 +32,7 @@ from app.models.comment import Comment
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
 
 from app.models.user_emotion_dna import UserEmotionDna
+from app.models.user_emotion_summary import UserEmotionSummary
 
 from app.dto.mypage import (
     RecentVideoDto,
@@ -115,6 +117,15 @@ def _build_emotion_summary_from_docs(docs: List[Dict]) -> Dict:
     emotion_seconds = {emotion: 0.0 for emotion in emotions}
 
     for doc in docs:
+        precomputed_seconds = doc.get('emotion_seconds')
+        if isinstance(precomputed_seconds, dict):
+            for emotion in emotion_seconds:
+                try:
+                    emotion_seconds[emotion] += float(precomputed_seconds.get(emotion, 0))
+                except (TypeError, ValueError):
+                    continue
+            continue
+
         timeline = doc.get('most_emotion_timeline') or {}
         per_second_emotion = {}
         for time_key, emotion in timeline.items():
@@ -336,33 +347,84 @@ class MypageService:
         return result
 
     @staticmethod
-    @transactional_readonly
+    @transactional
     def get_emotion_summary(user_id: str) -> Dict:
         user = User.query.filter_by(user_id=user_id, is_deleted=0).first()
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
         repo = YoutubeWatchingDataRepository(mongo_db)
+        aggregate = UserEmotionSummary.query.filter_by(user_id=user_id).first()
+        if aggregate is None:
+            try:
+                aggregate = UserEmotionSummary(user_id=user_id)
+                db.session.add(aggregate)
+                db.session.flush()
+            except IntegrityError:
+                # 동시 최초 요청에서는 먼저 생성한 트랜잭션의 행을 다시 사용한다.
+                db.session.rollback()
+                aggregate = UserEmotionSummary.query.filter_by(user_id=user_id).first()
 
-        #NOTE: 0.1초 프레임을 고유 초 단위로 묶어 예전 도넛 시간 의미를 유지
-        docs = list(repo.collection.find(
-            {'user_id': user_id},
-            {
-                'most_emotion_timeline': 1,
-                'emotion_percentages': 1,
-                'duration': 1,
-                'completion_rate': 1,
-                'frame_count': 1,
-                '_id': 0
-            }
-        ))
+        for _ in range(3):
+            base_seconds = aggregate.emotion_seconds_dict()
 
-        summary = _build_emotion_summary_from_docs(docs)
+            if aggregate.last_finalized_at is None:
+                # 기존 문서는 finalized_at/emotion_seconds가 없으므로 최초 한 번만 원본을 읽는다.
+                checkpoint_at = datetime.utcnow()
+                checkpoint_session_id = ''
+                docs = list(repo.collection.find(
+                    {'user_id': user_id},
+                    {
+                        'most_emotion_timeline': 1,
+                        'emotion_percentages': 1,
+                        'duration': 1,
+                        'completion_rate': 1,
+                        'frame_count': 1,
+                        '_id': 0,
+                    }
+                ))
+            else:
+                docs = repo.find_finalized_emotion_summaries_since(
+                    user_id,
+                    aggregate.last_finalized_at,
+                    aggregate.last_session_id,
+                )
+                if not docs:
+                    summary = _build_emotion_summary_from_docs([
+                        {'emotion_seconds': base_seconds}
+                    ])
+                    return EmotionSummaryDto(**summary).to_dict()
 
-        return EmotionSummaryDto(
-            emotion_percentages=summary['emotion_percentages'],
-            emotion_seconds=summary['emotion_seconds']
-        ).to_dict()
+                last_doc = docs[-1]
+                checkpoint_at = last_doc['finalized_at']
+                checkpoint_session_id = last_doc['video_view_log_id']
+
+            delta = _build_emotion_summary_from_docs(docs)['emotion_seconds']
+            applied = UserEmotionSummary.apply_delta(
+                user_id=user_id,
+                expected_version=aggregate.lock_version,
+                emotion_seconds=delta,
+                checkpoint_at=checkpoint_at,
+                checkpoint_session_id=checkpoint_session_id,
+            )
+            if applied:
+                merged_seconds = {
+                    emotion: base_seconds[emotion] + delta[emotion]
+                    for emotion in base_seconds
+                }
+                summary = _build_emotion_summary_from_docs([
+                    {'emotion_seconds': merged_seconds}
+                ])
+                return EmotionSummaryDto(**summary).to_dict()
+
+            db.session.rollback()
+            aggregate = UserEmotionSummary.query.filter_by(user_id=user_id).first()
+
+        # 충돌이 반복되면 다른 요청이 만든 최신 누적값을 반환하고 다음 조회에서 신규분을 재시도한다.
+        summary = _build_emotion_summary_from_docs([
+            {'emotion_seconds': aggregate.emotion_seconds_dict()}
+        ])
+        return EmotionSummaryDto(**summary).to_dict()
 
     @staticmethod
     @transactional_readonly
