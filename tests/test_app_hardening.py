@@ -395,5 +395,12 @@ class CeleryBeatConfigurationTest(unittest.TestCase):
         self.assertEqual(result, {'video_count': 1})
 
 
+class GunicornConfigurationTest(unittest.TestCase):
+    def test_web_uses_two_workers_to_limit_tensorflow_memory(self):
+        entrypoint = Path('docker-entrypoint.sh').read_text(encoding='utf-8')
+
+        self.assertIn('--workers 2', entrypoint)
+
+
 if __name__ == '__main__':
     unittest.main()

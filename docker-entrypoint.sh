@@ -9,7 +9,7 @@ echo "Starting Gunicorn on port $PORT..."
 # Gunicorn 실행
 exec gunicorn \
     --bind "0.0.0.0:$PORT" \
-    --workers 4 \
+    --workers 2 \
     --worker-class eventlet \
     --timeout 120 \
     --max-requests 1000 \
