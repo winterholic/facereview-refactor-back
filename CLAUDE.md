@@ -115,6 +115,9 @@ common/
 - `get_logger('모듈명')` 으로 로거 생성
 
 ### 스키마 (marshmallow)
+- 외부 입력의 형식·필수값·범위는 가능한 한 Marshmallow 스키마에서 검증
+- 모델·Repository가 책임질 수 있는 데이터 무결성과 변환은 해당 경계에서 검증
+- MongoDB 타임라인처럼 구조가 복잡한 데이터는 과도한 클래스화 대신 dict/list 사용 허용
 - 요청 파라미터: `XXXRequestSchema`, 응답: `XXXResponseSchema`
 - query string: `@blueprint.arguments(Schema, location='query')`
 - body: `@blueprint.arguments(Schema)` (location 생략)
