@@ -36,7 +36,7 @@ class VideoRequest(db.Model):
         comment='유튜브 영상 전체 URL (예: https://www.youtube.com/watch?v=dQw4w9WgXcQ)'
     )
 
-    # NOTE: docs/MARIA_CREATE_QUERY.txt(참고문서)엔 category 컬럼이 있었지만 실제 운영 DB엔
+    # NOTE: docs/database-refactor.md의 레거시 설계엔 category 컬럼이 있었지만 실제 운영 DB엔
     #       한 번도 반영된 적 없음(schema drift) — 여기 매핑했다가 실제 쿼리가
     #       "Unknown column 'video_request.category'"로 깨지는 걸 실측으로 확인해 되돌림.
     #       실제 데이터 흐름을 보면 요청 생성 시점(home_service.create_user_video_recommend,

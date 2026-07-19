@@ -48,6 +48,23 @@ common/
   saga/            # 분산 트랜잭션 Saga 패턴 구현
 ```
 
+## 문서 인덱스
+
+`docs/`는 필요할 때만 읽는다. 작업과 직접 관련된 문서만 선택해 코드와 대조한다.
+
+| 문서 | 읽는 시점 |
+|------|-----------|
+| [`docs/admin-features.md`](docs/admin-features.md) | 관리자 API·대시보드 변경 |
+| [`docs/mypage-features.md`](docs/mypage-features.md) | 마이페이지 감정 분석·집계 변경 |
+| [`docs/recommendation-algorithm.md`](docs/recommendation-algorithm.md) | 추천 점수·후보 풀·개인화 변경 |
+| [`docs/mongodb-models.md`](docs/mongodb-models.md) | MongoDB 컬렉션·타임라인 필드 변경 |
+| [`docs/database-refactor.md`](docs/database-refactor.md) | MariaDB/MongoDB 경계와 마이그레이션 배경 확인 |
+| [`docs/legacy-database.md`](docs/legacy-database.md) | `origin-codes/`의 레거시 필드 해석 |
+| [`docs/circular-import-history.md`](docs/circular-import-history.md) | Application Factory·SocketIO import 구조 변경 |
+
+- 각 문서의 frontmatter에서 `status`, `updated`, `source_of_truth`를 먼저 확인한다.
+- `historical` 또는 `reference-with-legacy-examples` 문서의 예시보다 현재 모델 코드를 우선한다.
+
 ## 핵심 아키텍처 패턴
 
 ### Route → Service → DTO 흐름
