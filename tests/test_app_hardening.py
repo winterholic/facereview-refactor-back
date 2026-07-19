@@ -1,3 +1,4 @@
+import importlib
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ from flask import Flask, current_app, g
 
 import app as app_package
 import common.celery_app as celery_module
+import common.config.celery_config as celery_config_module
 import common.decorator.auth_decorators as auth_decorators
 from app.routes.base import base_endpoint
 from common.enum.error_code import APIError
@@ -19,6 +21,7 @@ from sqlalchemy import create_engine
 
 from common.extensions import db
 from common.config.config import ProductionConfig
+from common.config.celery_config import CeleryConfig
 from app.models.user import User
 from app.services.auth_service import AuthService
 from werkzeug.security import generate_password_hash
@@ -282,7 +285,7 @@ class CeleryInitializationTest(unittest.TestCase):
 
         self.assertIs(celery.Task, first_task_class)
 
-    def test_worker_factory_disables_web_only_startup(self):
+    def test_worker_factory_disables_model_preload(self):
         create_worker_celery = getattr(celery_module, 'create_worker_celery', None)
         self.assertTrue(callable(create_worker_celery))
         calls = []
@@ -296,13 +299,100 @@ class CeleryInitializationTest(unittest.TestCase):
 
         self.assertEqual(calls, [(
             'production',
-            {'start_scheduler': False, 'preload_emotion_model': False},
+            {'preload_emotion_model': False},
         )])
 
     def test_compose_uses_initialized_worker_module(self):
         compose = Path('docker-compose.yml').read_text(encoding='utf-8')
 
-        self.assertIn('celery -A celery_worker.celery worker', compose)
+        self.assertIn(
+            'celery -A celery_worker.celery worker --loglevel=info '
+            '--queues=celery,watching_data',
+            compose,
+        )
+
+
+class CeleryBeatConfigurationTest(unittest.TestCase):
+    def test_celery_redis_url_falls_back_to_authenticated_components(self):
+        build_redis_url = getattr(celery_config_module, 'build_redis_url', None)
+        self.assertTrue(callable(build_redis_url))
+
+        url = build_redis_url({
+            'REDIS_HOST': 'redis.internal',
+            'REDIS_PORT': '6380',
+            'REDIS_DB': '3',
+            'REDIS_PASSWORD': 'p@ss word',
+        })
+
+        self.assertEqual(url, 'redis://:p%40ss%20word@redis.internal:6380/3')
+
+    def test_celery_redis_url_prefers_explicit_url(self):
+        build_redis_url = getattr(celery_config_module, 'build_redis_url', None)
+        self.assertTrue(callable(build_redis_url))
+
+        url = build_redis_url({
+            'REDIS_URL': 'redis://:secret@redis.example:6379/5',
+            'REDIS_HOST': 'ignored',
+        })
+
+        self.assertEqual(url, 'redis://:secret@redis.example:6379/5')
+
+    def test_periodic_jobs_are_registered_in_celery_beat(self):
+        schedules = CeleryConfig.beat_schedule
+
+        self.assertEqual(set(schedules), {
+            'fetch-youtube-trending-videos',
+            'fill-youtube-category-videos',
+            'rebuild-recommendation-pool',
+        })
+        self.assertEqual(
+            schedules['fetch-youtube-trending-videos']['task'],
+            'common.tasks.scheduled_tasks.fetch_youtube_trending_videos',
+        )
+
+    def test_compose_runs_one_dedicated_beat_service(self):
+        compose = Path('docker-compose.yml').read_text(encoding='utf-8')
+
+        self.assertEqual(compose.count('celery-beat:'), 1)
+        self.assertIn(
+            'celery -A common.celery_app.celery_app beat --loglevel=info',
+            compose,
+        )
+        self.assertEqual(compose.count('disable: true'), 2)
+
+    def test_web_application_no_longer_imports_apscheduler(self):
+        app_factory = Path('app/__init__.py').read_text(encoding='utf-8')
+        extensions = Path('common/extensions.py').read_text(encoding='utf-8')
+
+        self.assertNotIn('init_scheduler', app_factory)
+        self.assertNotIn('APScheduler', extensions)
+
+    def test_scheduled_tasks_are_discovered_by_celery(self):
+        self.assertIn(
+            'common.tasks.scheduled_tasks',
+            celery_module.celery_app.conf.include,
+        )
+
+    def test_periodic_task_wrappers_execute_existing_business_jobs(self):
+        try:
+            scheduled_tasks = importlib.import_module('common.tasks.scheduled_tasks')
+        except ModuleNotFoundError:
+            self.fail('Celery Beat 작업 모듈이 필요합니다.')
+
+        with patch.object(scheduled_tasks, 'YoutubeTrendingJob') as trending:
+            scheduled_tasks.fetch_youtube_trending_videos.run()
+            trending.return_value.execute.assert_called_once_with()
+
+        with patch.object(scheduled_tasks, 'YoutubeCategoryFillJob') as category:
+            scheduled_tasks.fill_youtube_category_videos.run()
+            category.return_value.execute.assert_called_once_with()
+
+        with patch.object(scheduled_tasks.HomeService, '_build_and_cache_ranked_pool') as rebuild:
+            rebuild.return_value = (['video-1'], None)
+            result = scheduled_tasks.rebuild_recommendation_pool.run()
+
+        rebuild.assert_called_once_with()
+        self.assertEqual(result, {'video_count': 1})
 
 
 if __name__ == '__main__':

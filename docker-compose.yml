@@ -31,7 +31,28 @@ services:
       - FLASK_ENV=production
     # 이미지 ENTRYPOINT가 gunicorn 고정이라 비워야 아래 command(celery)가 실제로 실행됨
     entrypoint: []
-    command: celery -A celery_worker.celery worker --loglevel=info
+    command: celery -A celery_worker.celery worker --loglevel=info --queues=celery,watching_data
+    healthcheck:
+      disable: true
+    volumes:
+      - ./logs:/app/logs
+    depends_on:
+      app:
+        condition: service_healthy
+
+  celery-beat:
+    image: ghcr.io/winterholic/facereview-refactor-back:${IMAGE_TAG:-latest}
+    container_name: facereview-celery-beat
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - FLASK_ENV=production
+    entrypoint: []
+    command: celery -A common.celery_app.celery_app beat --loglevel=info
+    healthcheck:
+      disable: true
     volumes:
       - ./logs:/app/logs
     depends_on:

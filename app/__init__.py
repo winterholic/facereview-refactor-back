@@ -38,7 +38,6 @@ def _register_blueprints(api_instance, include_development=False):
 def create_app(
     config_name='default',
     *,
-    start_scheduler=True,
     preload_emotion_model=True,
 ):
     app = Flask(__name__)
@@ -190,10 +189,6 @@ def create_app(
         logger.warning(f"Redis 초기화 중 예상치 못한 오류 발생: {e}")
         logger.exception("상세 오류 정보:")
         extensions.redis_client = None
-
-    if start_scheduler:
-        from common.scheduler import init_scheduler
-        init_scheduler(app)
 
     celery_obj = init_celery_app(app)
     extensions.celery = celery_obj

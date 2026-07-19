@@ -18,7 +18,7 @@ YouTube 영상 시청 중 웹캠으로 감정을 실시간 분석하고, 감정 
 - **NoSQL**: MongoDB (pymongo, 시청 데이터·감정 분포)
 - **캐시/메시지큐**: Redis (세션·블랙리스트·메트릭)
 - **비동기 작업**: Celery
-- **스케줄러**: APScheduler (YouTube 데이터 수집)
+- **스케줄러**: Celery Beat 단일 컨테이너 (YouTube 데이터 수집·추천 풀 재계산)
 - **ML**: TensorFlow/Keras (model.h5 — 얼굴 감정 분류)
 - **인프라**: Docker, Gunicorn, Cloudflare (HTTPS 처리)
 
@@ -39,10 +39,11 @@ common/
   decorator/       # auth_decorators, db_decorators (@transactional 등)
   enum/            # APIError, GenreEnum 등
   exception/       # BusinessError
-  extensions.py    # db, mongo_db, redis_client, scheduler, socketio 초기화
+  extensions.py    # db, mongo_db, redis_client, socketio 초기화
   scheduler/
     jobs/          # YoutubeTrendingJob, YoutubeCategoryFillJob
-    tasks.py       # APScheduler 작업 등록
+  tasks/
+    scheduled_tasks.py  # Celery Beat가 발행하는 예약 작업
   utils/           # 토큰 디코딩, 로깅 유틸
   ml/              # 감정 분류 모델 로더
   saga/            # 분산 트랜잭션 Saga 패턴 구현

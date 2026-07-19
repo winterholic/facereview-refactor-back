@@ -6,7 +6,10 @@ def create_celery_app():
         'facereview',
         broker=None,
         backend=None,
-        include=['common.tasks.watching_data_tasks']
+        include=[
+            'common.tasks.watching_data_tasks',
+            'common.tasks.scheduled_tasks',
+        ]
     )
 
     from common.config.celery_config import CeleryConfig
@@ -38,7 +41,6 @@ def init_celery_app(app, celery=None):
 def create_worker_celery(app_factory, config_name, celery=None):
     app = app_factory(
         config_name,
-        start_scheduler=False,
         preload_emotion_model=False,
     )
     return init_celery_app(app, celery)
