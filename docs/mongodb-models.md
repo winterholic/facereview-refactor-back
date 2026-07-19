@@ -3,7 +3,7 @@ title: "FaceReview MongoDB Models"
 description: "현재 운영 코드가 사용하는 MongoDB 컬렉션과 핵심 필드"
 document_type: "database-reference"
 status: "active"
-version: "2.2"
+version: "2.3"
 created: "2025-12-27"
 updated: "2026-07-19"
 source_of_truth:
@@ -59,7 +59,7 @@ MongoDB는 감정 타임라인과 집계처럼 크기와 구조가 유동적인 
 - `dominant_emotion`은 raw `emotion_averages` 최댓값이며 30프레임 미만이면 `null`이다.
 - `recommendation_scores`는 카테고리 가중치를 적용한 동일 감정 내 정렬용 점수다.
 - 현재 프론트와 서버의 샘플링 계약은 0.5초마다 1회, 즉 초당 2프레임이다. 타임라인 키가 centisecond 단위여도 수집 주기가 0.1초라는 의미는 아니다.
-- `video_distribution.average_completion_rate`의 `duration * 2` 계산은 이 계약과 일치한다. 반면 `WatchingDataService`에 남은 `duration * 10` 계산은 과거 0.1초 설계의 잔재다.
+- `video_distribution.average_completion_rate`와 `WatchingDataService`의 세션 완료율은 모두 `duration * 2`를 완주 프레임 수로 사용한다.
 
 ## 2. `youtube_watching_data`
 

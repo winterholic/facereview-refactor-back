@@ -93,5 +93,21 @@ class UpdateVideoDistributionMinFramesTest(unittest.TestCase):
         self.assertEqual(dist_repo.upserted.dominant_emotion, 'happy')
 
 
+class WatchingCompletionRateTest(unittest.TestCase):
+    def test_frame_count_uses_two_samples_per_second(self):
+        self.assertEqual(
+            WatchingDataService._calculate_completion_rate_from_count(60, duration=60),
+            0.5,
+        )
+
+    def test_frame_list_uses_two_samples_per_second(self):
+        frames = [{} for _ in range(60)]
+
+        self.assertEqual(
+            WatchingDataService._calculate_completion_rate(frames, duration=60),
+            0.5,
+        )
+
+
 if __name__ == '__main__':
     unittest.main()

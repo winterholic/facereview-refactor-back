@@ -129,8 +129,8 @@ class WatchingDataService:
             #NOTE: duration이 없으면 기존 로직 사용 (1000개 기준)
             return min(1.0, len(frames) / 1000.0)
 
-        #NOTE: 0.1초(100ms) 단위로 프레임 전송 → 최대 프레임 개수 = duration * 10
-        max_frame_count = duration * 10
+        #NOTE: 프론트가 0.5초마다 전송하므로 완주 프레임 수는 duration * 2
+        max_frame_count = duration * 2
         actual_frame_count = len(frames)
 
         completion_rate = actual_frame_count / max_frame_count if max_frame_count > 0 else 0.0
@@ -172,8 +172,8 @@ class WatchingDataService:
             return 0.0
         if not duration:
             return min(1.0, frame_count / 1000.0)
-        #NOTE: 0.1초(100ms) 단위로 프레임 전송 → 최대 프레임 개수 = duration * 10
-        max_frame_count = duration * 10
+        #NOTE: 프론트가 0.5초마다 전송하므로 완주 프레임 수는 duration * 2
+        max_frame_count = duration * 2
         return min(1.0, frame_count / max_frame_count if max_frame_count > 0 else 0.0)
 
     @staticmethod

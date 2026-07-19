@@ -88,7 +88,7 @@ def _estimate_watch_seconds_from_summary(doc: Dict) -> float:
     except (TypeError, ValueError):
         timeline_len = 0
     if timeline_len > 0:
-        return timeline_len / 10.0
+        return timeline_len / 2.0
 
     frame_count = doc.get('frame_count')
     try:
@@ -96,7 +96,7 @@ def _estimate_watch_seconds_from_summary(doc: Dict) -> float:
     except (TypeError, ValueError):
         frame_count = 0
     if frame_count > 0:
-        return frame_count / 10.0
+        return frame_count / 2.0
 
     timeline = doc.get('emotion_score_timeline') or {}
     if timeline:

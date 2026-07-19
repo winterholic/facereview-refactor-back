@@ -1,6 +1,9 @@
 import unittest
 
-from app.services.mypage_service import _build_emotion_summary_from_docs
+from app.services.mypage_service import (
+    _build_emotion_summary_from_docs,
+    _estimate_watch_seconds_from_summary,
+)
 
 
 class EmotionSummaryTest(unittest.TestCase):
@@ -63,6 +66,20 @@ class EmotionSummaryTest(unittest.TestCase):
         self.assertEqual(result['emotion_seconds']['happy'], 5)
         self.assertEqual(result['emotion_seconds']['surprise'], 3)
         self.assertEqual(result['emotion_percentages']['neutral'], 60.0)
+
+
+class WatchSecondsEstimateTest(unittest.TestCase):
+    def test_timeline_length_uses_two_samples_per_second(self):
+        self.assertEqual(
+            _estimate_watch_seconds_from_summary({'timeline_len': 60}),
+            30.0,
+        )
+
+    def test_frame_count_uses_two_samples_per_second(self):
+        self.assertEqual(
+            _estimate_watch_seconds_from_summary({'frame_count': 60}),
+            30.0,
+        )
 
 
 if __name__ == '__main__':
