@@ -7,7 +7,6 @@ def create_celery_app():
         broker=None,
         backend=None,
         include=[
-            'common.tasks.watching_data_tasks',
             'common.tasks.scheduled_tasks',
         ]
     )

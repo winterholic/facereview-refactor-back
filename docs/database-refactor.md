@@ -3,7 +3,7 @@ title: "FaceReview Database Refactor"
 description: "레거시 MongoDB에서 현재 MariaDB·MongoDB 혼합 구조로 이동한 설계 기록"
 document_type: "migration-reference"
 status: "reference-with-legacy-examples"
-version: "2.0"
+version: "2.1"
 created: "2025-12-27"
 updated: "2026-07-19"
 source_of_truth:
@@ -21,8 +21,9 @@ tags: ["database", "mariadb", "mongodb", "migration"]
 - `user.role`은 `GENERAL`, `ADMIN`, `SUPER_ADMIN`을 지원하고 이메일 인증 상태를 저장한다.
 - 영상 카테고리는 `horror`, `exercise`, `vlog`를 포함한 16종이다.
 - `video_request`에는 `category`가 없으며 승인 시 관리자가 카테고리를 전달한다.
-- `youtube_watching_data`에는 `frame_count`, `emotion_sum`, `emotion_seconds`, `finalized_at`이 추가됐다.
-- 도넛 차트 증분 집계를 위해 MariaDB `user_emotion_summary` 테이블을 사용한다.
+- `youtube_watching_data`에는 `frame_count`, `emotion_sum`, `emotion_seconds`, `finalized_at`이 추가됐다. 현재 실시간 경로는 앞의 두 누적 필드만 `watch_frame`에서 갱신한다.
+- 도넛 차트 증분 집계를 위해 MariaDB `user_emotion_summary` 테이블을 사용한다. 다만 프론트의 세션 종료 이벤트가 폐기된 뒤 자동 finalization 경로는 아직 대체되지 않아 신규 일반 시청 세션의 증분 반영에는 제한이 있다.
+- 미사용 Socket.IO `init_watching`·`end_watching` 이벤트와 `watching_data.save` Celery 작업은 제거됐으며, `watch_frame`이 세션 초기화와 실시간 저장을 단독으로 담당한다.
 - `video_timeline_emotion_count.counts`의 현재 값은 감정명별 객체이며, 배열 형식은 읽기 호환만 유지한다.
 
 ### 현재 모델 인벤토리

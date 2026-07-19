@@ -307,7 +307,7 @@ class CeleryInitializationTest(unittest.TestCase):
 
         self.assertIn(
             'celery -A celery_worker.celery worker --loglevel=info '
-            '--queues=celery,watching_data --concurrency=4',
+            '--queues=celery --concurrency=4',
             compose,
         )
 
@@ -368,9 +368,9 @@ class CeleryBeatConfigurationTest(unittest.TestCase):
         self.assertNotIn('APScheduler', extensions)
 
     def test_scheduled_tasks_are_discovered_by_celery(self):
-        self.assertIn(
-            'common.tasks.scheduled_tasks',
-            celery_module.celery_app.conf.include,
+        self.assertEqual(
+            set(celery_module.celery_app.conf.include),
+            {'common.tasks.scheduled_tasks'},
         )
 
     def test_periodic_task_wrappers_execute_existing_business_jobs(self):

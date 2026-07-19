@@ -1,6 +1,5 @@
 import unittest
 from datetime import datetime
-from unittest.mock import patch
 
 from flask import Flask
 
@@ -10,8 +9,6 @@ from common.utils.emotion_summary import (
     build_finalized_session_query,
 )
 from app.models.user_emotion_summary import UserEmotionSummary
-from app.models.mongodb.youtube_watching_data import YoutubeWatchingData
-from app.services.watching_data_service import WatchingDataService
 
 
 class EmotionSummaryAggregationTest(unittest.TestCase):
@@ -93,45 +90,6 @@ class UserEmotionSummaryOptimisticLockTest(unittest.TestCase):
         self.assertFalse(second)
         self.assertEqual(summary.happy_seconds, 5)
         self.assertEqual(summary.lock_version, 1)
-
-
-class WatchingDataFinalizeRetryTest(unittest.TestCase):
-    def test_save_preserves_existing_session_finalized_at(self):
-        original_finalized_at = datetime(2026, 7, 19, 12, 30, 0)
-        existing = YoutubeWatchingData(
-            user_id='user-1',
-            video_id='video-1',
-            video_view_log_id='session-a',
-            created_at=datetime(2026, 7, 19, 12, 0, 0),
-            emotion_score_timeline={'0': [0, 100, 0, 0, 0]},
-            most_emotion_timeline={'0': 'happy'},
-            finalized_at=original_finalized_at,
-        )
-
-        class _Repo:
-            finalized = None
-
-            def find_by_video_view_log_id(self, video_view_log_id):
-                return existing
-
-            def finalize(self, watching_data):
-                self.finalized = watching_data
-
-        repo = _Repo()
-        cached_data = {
-            'user_id': 'user-1',
-            'video_id': 'video-1',
-            'duration': 100,
-        }
-
-        with patch('app.services.watching_data_service.YoutubeWatchingDataRepository', return_value=repo), \
-             patch('app.services.watching_data_service.VideoDistributionRepository'), \
-             patch.object(WatchingDataService, '_update_video_distribution'):
-            WatchingDataService.save_watching_data(
-                'session-a', cached_data=cached_data
-            )
-
-        self.assertEqual(repo.finalized.finalized_at, original_finalized_at)
 
 
 if __name__ == '__main__':

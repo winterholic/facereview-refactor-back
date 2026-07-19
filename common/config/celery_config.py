@@ -40,10 +40,6 @@ class CeleryConfig:
     worker_prefetch_multiplier = 1
     worker_max_tasks_per_child = 1000
 
-    task_routes = {
-        'common.tasks.watching_data_tasks.*': {'queue': 'watching_data'},
-    }
-
     beat_schedule = {
         'fetch-youtube-trending-videos': {
             'task': 'common.tasks.scheduled_tasks.fetch_youtube_trending_videos',

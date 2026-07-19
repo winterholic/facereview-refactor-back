@@ -2,7 +2,6 @@ from flask import request, current_app
 from common import extensions
 from common.extensions import socketio, redis_client
 from common.cache.watching_data_cache import WatchingDataCache
-from common.tasks.watching_data_tasks import save_watching_data_task
 from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 from app.models.mongodb.video_distribution import VideoDistributionRepository
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
@@ -45,44 +44,6 @@ def handle_connect(message):
         'status': 'success',
         'message': '서버에 연결완료 되었습니다.'
     }
-
-#NOTE: 기존 클라이언트 호환을 위해 유지하며 신규 클라이언트는 watch_frame에서 자동 초기화한다.
-@socketio.on('init_watching')
-def handle_init_watching(message):
-    try:
-        video_view_log_id = message.get('video_view_log_id')
-        user_id = message.get('user_id')
-        video_id = message.get('video_id')
-        duration = message.get('duration')
-
-        if not all([video_view_log_id, user_id, video_id, duration]):
-            return {
-                'status': 'error',
-                'message': 'Missing required fields'
-            }
-
-        watching_cache.init_watching_data(
-            video_view_log_id=video_view_log_id,
-            user_id=user_id,
-            video_id=video_id,
-            duration=duration
-        )
-
-        #NOTE: Redis에 타임라인 평균 감정 데이터 미리 캐싱 (3시간 TTL)
-        _cache_timeline_emotion_data(video_view_log_id, video_id)
-
-        logger.info(f"시청 초기화 완료: {video_view_log_id}")
-        return {
-            'status': 'success',
-            'message': 'Watching initialized'
-        }
-
-    except Exception as e:
-        logger.error(f"시청 초기화 중 오류 발생: {e}")
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
 
 @socketio.on('watch_frame')
 def handle_watch_frame(message):
@@ -172,55 +133,6 @@ def handle_disconnect(message):
         'status': 'success',
         'message': '서버 연결이 종료 되었습니다.'
     }
-
-
-@socketio.on('end_watching')
-def handle_end_watching(message):
-    try:
-        video_view_log_id = message.get('video_view_log_id')
-        duration = message.get('duration')
-        client_info = message.get('client_info', {})
-
-        if not video_view_log_id:
-            return {
-                'status': 'error',
-                'message': 'Missing video_view_log_id'
-            }
-
-        #NOTE: Celery Worker는 별도 프로세스이므로 캐시 데이터를 직접 전달
-        cached_data = watching_cache.remove_watching_data(video_view_log_id)
-        if not cached_data:
-            logger.warning(f"시청 캐시를 찾을 수 없음: {video_view_log_id}")
-            return {
-                'status': 'error',
-                'message': 'No watching data found'
-            }
-
-        #NOTE: Celery JSON serializer는 datetime 처리 불가 → 제거 (서비스에서 새로 생성)
-        cached_data.pop('created_at', None)
-
-        task = save_watching_data_task.delay(
-            video_view_log_id=video_view_log_id,
-            duration=duration,
-            client_info=client_info,
-            cached_data=cached_data
-        )
-
-        #NOTE: 시청 종료 시 Redis 타임라인 캐시 삭제 (세션 종료)
-        _delete_timeline_cache(video_view_log_id)
-
-        logger.info(f"시청 종료: {video_view_log_id} (Celery task ID: {task.id})")
-        return {
-            'status': 'success',
-            'message': 'Watching data is being saved'
-        }
-
-    except Exception as e:
-        logger.error(f"시청 종료 중 오류 발생: {e}")
-        return {
-            'status': 'error',
-            'message': str(e)
-        }
 
 
 def _cache_timeline_emotion_data_bg(app, video_view_log_id: str, video_id: str):
@@ -379,18 +291,6 @@ def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_tim
     except Exception as e:
         logger.error(f"Redis 타임라인 조회 중 오류 발생: {e}")
         return None
-
-
-def _delete_timeline_cache(video_view_log_id: str):
-    try:
-        redis_key = f"facereview:session:{video_view_log_id}:timeline"
-
-        if redis_client:
-            redis_client.delete(redis_key)
-            logger.debug(f"Redis 타임라인 캐시 삭제: {video_view_log_id}")
-
-    except Exception as e:
-        logger.error(f"Redis 캐시 삭제 중 오류 발생: {e}")
 
 
 def _get_video_category(video_id: str) -> str:

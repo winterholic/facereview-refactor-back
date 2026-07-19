@@ -45,10 +45,6 @@ class WatchingDataCache:
             return None
         return data
 
-    def remove_watching_data(self, video_view_log_id: str) -> Optional[Dict]:
-        with self._lock:
-            return self._cache.pop(video_view_log_id, None)
-
     def clear_all(self):
         with self._lock:
             self._cache.clear()

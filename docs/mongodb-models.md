@@ -3,7 +3,7 @@ title: "FaceReview MongoDB Models"
 description: "현재 운영 코드가 사용하는 MongoDB 컬렉션과 핵심 필드"
 document_type: "database-reference"
 status: "active"
-version: "2.3"
+version: "2.4"
 created: "2025-12-27"
 updated: "2026-07-19"
 source_of_truth:
@@ -115,7 +115,8 @@ MongoDB는 감정 타임라인과 집계처럼 크기와 구조가 유동적인 
 ```
 
 - 타임라인 키는 `int(youtube_running_time * 100)`인 centisecond 문자열이다.
-- `emotion_seconds`와 `finalized_at`은 세션 종료 시 기록되며 마이페이지 증분 도넛 집계에 사용된다.
+- 현재 `watch_frame`은 타임라인, `frame_count`, `emotion_sum`, `emotion_percentages`, `dominant_emotion`을 프레임마다 갱신한다.
+- `emotion_seconds`와 `finalized_at`은 과거 `end_watching` 종료 경로와 생성 데이터에 사용된 호환 필드다. 현재 프론트는 종료 이벤트를 보내지 않으므로 일반 실시간 세션에서는 자동으로 기록되지 않는다.
 - 인덱스: `(user_id, created_at desc)`, `(user_id, finalized_at, video_view_log_id)`, `(video_id, created_at desc)`, unique `video_view_log_id`.
 
 ## 3. `video_timeline_emotion_count`

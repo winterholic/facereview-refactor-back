@@ -122,8 +122,9 @@ common/
 - 예: `facereview:session:{id}:timeline`, `facereview:video:{id}:category`
 
 ### 소켓 이벤트 (시청 중 실시간)
-- `watch_frame`: 클라이언트에서 프레임 감정 데이터 수신 → 실시간 MongoDB 저장
-- `end_watching`: 캐시 → Celery를 통한 영구 저장 트리거
+- `watch_frame`: 유일한 시청 데이터 이벤트. 첫 프레임에서 세션을 자동 초기화하고 이후 프레임 감정 데이터를 MongoDB에 실시간 저장
+- `init_watching`, `end_watching`은 프론트에서 사용하지 않아 제거됐다. 다시 추가하려면 프론트 프로토콜과 세션 종료 기준을 먼저 정의한다.
+- `disconnect`는 소켓 연결만 종료하며 시청 세션을 확정하거나 데이터를 재집계하지 않는다.
 - 타임라인 키는 **centisecond 단위** (`초 × 100`): `20.29초 → "2029"`
 
 ## 코드 컨벤션

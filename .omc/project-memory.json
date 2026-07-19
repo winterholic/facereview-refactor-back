@@ -248,12 +248,6 @@
       "type": "directory"
     },
     {
-      "path": "common\\tasks\\watching_data_tasks.py",
-      "accessCount": 2,
-      "lastAccessed": 1774538410342,
-      "type": "file"
-    },
-    {
       "path": "app\\routes\\mypage.py",
       "accessCount": 2,
       "lastAccessed": 1776693561573,

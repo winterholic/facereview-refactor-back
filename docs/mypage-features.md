@@ -3,7 +3,7 @@ title: "FaceReview My Page Features"
 description: "마이페이지 감정 분석 API와 집계 방식의 현재 동작"
 document_type: "feature-reference"
 status: "active"
-version: "3.3"
+version: "3.4"
 created: "2026-02-20"
 updated: "2026-07-19"
 source_of_truth:
@@ -82,7 +82,9 @@ tags: ["mypage", "emotion", "analytics", "api"]
 
 전체 시청 기록 기반으로 5가지 감정의 누적 시간과 비율을 제공한다.
 
-최초 조회는 기존 MongoDB 타임라인을 한 번 집계하고, 이후에는 MariaDB `user_emotion_summary`의 체크포인트와 `lock_version`을 사용해 새로 종료된 세션만 낙관적으로 합산한다. 신규 세션은 종료 시 MongoDB에 `emotion_seconds`와 `finalized_at`을 저장한다.
+최초 조회는 기존 MongoDB 타임라인을 한 번 집계하고 MariaDB `user_emotion_summary`에 결과와 체크포인트를 저장한다. 이후 집계 코드는 `finalized_at` 이후의 세션을 `lock_version` 기반 낙관적 락으로 합산할 수 있다.
+
+현재 프론트 프로토콜은 `watch_frame`만 사용하며 별도 세션 종료 이벤트가 없다. 따라서 실시간 세션에는 `finalized_at`과 `emotion_seconds`가 자동으로 확정되지 않아, 최초 집계 이후 생성된 일반 시청 세션은 현재 증분 집계 대상에 포함되지 않는다. 유휴 시간 기반 세션 확정처럼 명확한 종료 정책을 도입하기 전까지는 이 제한을 전제로 한다.
 
 **API**: `GET /api/v2/mypage/emotion/summary`
 
