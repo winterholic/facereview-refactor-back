@@ -78,7 +78,7 @@ common/
 ### 라우터 규칙
 - `flask.views` 사용 금지 — 무조건 개별 메서드 선언
 - 비즈니스 로직 직접 작성 금지, DB 모델 직접 접근 금지
-- 라우터에서 try-except로 에러를 직접 잡지 않는다 — `response_error` 로 처리
+- 라우터에서 try-except로 에러를 직접 잡지 않는다 — `BusinessError`와 전역 에러 핸들러로 처리
 
 ### 서비스 규칙
 - `flask.jsonify()` 등 HTTP 응답 객체 반환 금지 — 순수 데이터(dict/DTO)만 반환
@@ -90,10 +90,13 @@ common/
 - 메시지 오버라이딩: `BusinessError(APIError.XXX, "구체적인 메시지")`
 
 ### 응답 포맷
-- 성공: `return response_success(data={...}, message="...")`
-  → `{"result": "success", "message": "...", "data": {...}, "code": null}`
-- 실패: 전역 핸들러가 자동 처리
+- 성공: 각 엔드포인트의 `@blueprint.response` 스키마에 맞는 데이터를 최상위 JSON으로 바로 반환한다.
+  → 조회 예시: `{"videos": [...], "total": 10}` / 로그인 예시: `{"access_token": "..."}`
+- 데이터가 없는 명령형 성공 응답만 `SuccessResponseSchema`의 `{"result": "success", "message": "..."}` 형식을 사용한다.
+- 성공 응답을 임의로 `data` 필드에 감싸지 않는다. 응답 구조 변경은 현재 프론트 계약과 함께 조정한다.
+- 실패: 전역 에러 핸들러가 모든 REST API 실패 응답을 공통 envelope로 변환한다.
   → `{"result": "fail", "message": "...", "data": null, "code": "U001"}`
+- Socket.IO 응답은 REST envelope 대상이 아니며 이벤트별 `status`, `message`, `response` 계약을 따른다.
 
 ### 인증 데코레이터 3종
 - `@login_required`: 토큰 필수. 없거나 유효하지 않으면 즉시 에러
