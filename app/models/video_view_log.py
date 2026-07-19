@@ -12,7 +12,6 @@ def generate_uuid():
 class VideoViewLog(db.Model):
     __tablename__ = 'video_view_log'
 
-    # Primary Key
     video_view_log_id = Column(
         String(36),
         primary_key=True,
@@ -20,7 +19,6 @@ class VideoViewLog(db.Model):
         comment='시청 기록 ID (UUID)'
     )
 
-    # Foreign Keys
     video_id = Column(
         String(36),
         ForeignKey('video.video_id', ondelete='CASCADE', onupdate='CASCADE'),
@@ -34,10 +32,8 @@ class VideoViewLog(db.Model):
         comment='사용자 ID (FK, 비로그인 시 NULL)'
     )
 
-    # 비로그인 사용자 식별
     guest_token = Column(String(255), nullable=True, comment='비로그인 사용자 식별 토큰 (브라우저/세션 ID)')
 
-    # 타임스탬프
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='시청 일시')
     updated_at = Column(
         TIMESTAMP,
@@ -47,11 +43,9 @@ class VideoViewLog(db.Model):
         comment='수정일시'
     )
 
-    # Relationships
     video = relationship('Video', back_populates='view_logs')
     user = relationship('User', back_populates='view_logs')
 
-    # Indexes
     __table_args__ = (
         Index('idx_user_history', 'user_id', 'created_at'),
         Index('idx_video_history', 'video_id', 'created_at'),

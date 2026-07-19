@@ -3,7 +3,7 @@ from datetime import timedelta
 
 
 class Config:
-    # NOTE: 한글 등 non-ASCII 문자가 \uXXXX로 인코딩되는 것 방지
+    #NOTE: 한글 등 non-ASCII 문자가 \uXXXX로 인코딩되는 것 방지
     JSON_AS_ASCII = False
 
     SECRET_KEY = os.getenv('SECRET_KEY')
@@ -53,12 +53,27 @@ class Config:
     SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL')
 
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+    ENABLE_DEVELOPMENT_ROUTES = False
+    SOCKETIO_LOGGING = False
+    CORS_ORIGINS = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://localhost:4173',
+        'http://localhost:5000',
+        'https://facereview.net',
+        'https://www.facereview.net',
+        'https://facereview-api.winterholic.net',
+        'https://admin.facereview.net',
+        'https://facereview-admin.vercel.app',
+    ]
 
 
 class DevelopmentConfig(Config):
     DEBUG = True
     SQLALCHEMY_ECHO = True
     LOG_LEVEL = 'DEBUG'
+    ENABLE_DEVELOPMENT_ROUTES = True
+    SOCKETIO_LOGGING = True
 
 
 class ProductionConfig(Config):

@@ -1,5 +1,4 @@
 from flask import request, current_app
-from flask_socketio import emit
 from common import extensions
 from common.extensions import socketio, redis_client
 from common.cache.watching_data_cache import WatchingDataCache
@@ -26,6 +25,8 @@ _emotion_analyzer = None
 #NOTE: WatchingDataCache 싱글톤 인스턴스
 watching_cache = WatchingDataCache()
 
+#TODO: Socket.IO handshake JWT 인증을 도입한 뒤 message.user_id 대신 서버가 확인한 사용자 ID를 사용한다.
+
 
 def get_emotion_analyzer():
     global _emotion_analyzer
@@ -36,21 +37,16 @@ def get_emotion_analyzer():
     return _emotion_analyzer
 
 
-# NOTE : socket 연결 테스트용 이벤트(단순 테스트용)
 @socketio.on('connect')
 def handle_connect(message):
     logger.info(f"클라이언트 연결됨: {request.sid}")
-
-    # NOTE : emit 대신 return 사용
-    # emit('connected', {'status': 'success', 'message': '서버에 연결되었습니다.'})
     return {
         'sid': request.sid,
         'status': 'success',
         'message': '서버에 연결완료 되었습니다.'
     }
 
-# NOTE : [DEPRECATED] watch_frame에서 자동 초기화하므로 호출 불필요
-# NOTE : 하위 호환성을 위해 유지
+#NOTE: 기존 클라이언트 호환을 위해 유지하며 신규 클라이언트는 watch_frame에서 자동 초기화한다.
 @socketio.on('init_watching')
 def handle_init_watching(message):
     try:
@@ -60,10 +56,6 @@ def handle_init_watching(message):
         duration = message.get('duration')
 
         if not all([video_view_log_id, user_id, video_id, duration]):
-
-            # NOTE : emit 대신 return 사용
-            # emit('error', {'status': 'error', 'message': 'Missing required fields'})
-
             return {
                 'status': 'error',
                 'message': 'Missing required fields'
@@ -80,10 +72,6 @@ def handle_init_watching(message):
         _cache_timeline_emotion_data(video_view_log_id, video_id)
 
         logger.info(f"시청 초기화 완료: {video_view_log_id}")
-
-        # NOTE : emit 대신 return 사용
-        # emit('init_success', {'status': 'success', 'message': 'Watching initialized'})
-
         return {
             'status': 'success',
             'message': 'Watching initialized'
@@ -91,15 +79,11 @@ def handle_init_watching(message):
 
     except Exception as e:
         logger.error(f"시청 초기화 중 오류 발생: {e}")
-
-        # NOTE : emit 대신 return 사용
-        # emit('error', {'status': 'error', 'message': str(e)})
         return {
             'status': 'error',
             'message': str(e)
         }
 
-# NOTE : frame_data 보내는 socket 이벤트 (init_watching 없이 단독으로 동작)
 @socketio.on('watch_frame')
 def handle_watch_frame(message):
     try:
@@ -180,11 +164,9 @@ def handle_watch_frame(message):
         }
 
 
-# NOTE : 그냥 disconnect 테스트용 socket 이벤트
 @socketio.on('disconnect')
 def handle_disconnect(message):
     logger.info(f"클라이언트 연결 해제됨: {request.sid}")
-    # NOTE : emit 대신 return 사용
     return {
         'sid': request.sid,
         'status': 'success',
@@ -192,8 +174,6 @@ def handle_disconnect(message):
     }
 
 
-# NOTE : [OPTIONAL] youtube_watching_data 저장용 (개인 시청 기록)
-# NOTE : 호출하지 않아도 실시간 통계는 watch_frame에서 저장됨
 @socketio.on('end_watching')
 def handle_end_watching(message):
     try:
@@ -210,7 +190,7 @@ def handle_end_watching(message):
         #NOTE: Celery Worker는 별도 프로세스이므로 캐시 데이터를 직접 전달
         cached_data = watching_cache.remove_watching_data(video_view_log_id)
         if not cached_data:
-            logger.warning(f"No cached data for {video_view_log_id}")
+            logger.warning(f"시청 캐시를 찾을 수 없음: {video_view_log_id}")
             return {
                 'status': 'error',
                 'message': 'No watching data found'
@@ -230,12 +210,6 @@ def handle_end_watching(message):
         _delete_timeline_cache(video_view_log_id)
 
         logger.info(f"시청 종료: {video_view_log_id} (Celery task ID: {task.id})")
-        # NOTE : emit 대신 return 사용
-        # emit('end_success', {
-        #     'status': 'success',
-        #     'message': 'Watching data is being saved'
-        # })
-
         return {
             'status': 'success',
             'message': 'Watching data is being saved'
@@ -243,10 +217,6 @@ def handle_end_watching(message):
 
     except Exception as e:
         logger.error(f"시청 종료 중 오류 발생: {e}")
-
-        # NOTE : emit 대신 return 사용
-        # emit('error', {'status': 'error', 'message': str(e)})
-
         return {
             'status': 'error',
             'message': str(e)
@@ -337,7 +307,7 @@ def _cache_timeline_emotion_data(video_view_log_id: str, video_id: str):
         if timeline_count and timeline_count.counts:
             #NOTE: 모든 타임라인 데이터를 딕셔너리로 변환
             for time_key, counts_data in timeline_count.counts.items():
-                # NOTE: 객체 형태 {"neutral": 5, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
+                #NOTE: 객체 형태 {"neutral": 5, ...} 또는 배열 형태 [5, 3, ...] 둘 다 지원
                 if isinstance(counts_data, dict):
                     total = sum(counts_data.values())
                     if total > 0:
@@ -396,14 +366,14 @@ def _get_timeline_emotion_from_redis(video_view_log_id: str, youtube_running_tim
             return None  # 캐시 자체가 없음 → MongoDB fallback
 
         timeline_data = json.loads(cached_data)
-        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        #NOTE: centisecond 단위로 변환 (20.29초 → "2029")
         time_key = str(int(float(youtube_running_time) * 100))
 
         result = timeline_data.get(time_key)
         if result:
             return result
         else:
-            # NOTE: 캐시는 있지만 해당 시간 데이터가 없음 → MongoDB fallback 하지 않음
+            #NOTE: 캐시는 있지만 해당 시간 데이터가 없음 → MongoDB fallback 하지 않음
             return "EMPTY"
 
     except Exception as e:
@@ -427,25 +397,25 @@ def _get_video_category(video_id: str) -> str:
     try:
         redis_key = f"facereview:video:{video_id}:category"
 
-        # NOTE: Redis에서 먼저 조회
+        #NOTE: Redis에서 먼저 조회
         if redis_client:
             cached_category = redis_client.get(redis_key)
             if cached_category:
                 return cached_category.decode('utf-8') if isinstance(cached_category, bytes) else cached_category
 
-        # NOTE: RDB에서 조회
+        #NOTE: RDB에서 조회
         video = Video.query.filter_by(video_id=video_id).first()
         if not video:
-            logger.warning(f"Video not found: {video_id}")
+            logger.warning(f"영상을 찾을 수 없음: {video_id}")
             return 'etc'
 
-        # NOTE: GenreEnum을 문자열로 변환
+        #NOTE: GenreEnum을 문자열로 변환
         category = video.category.value if video.category else 'etc'
 
-        # NOTE: Redis에 캐싱 (24시간 TTL)
+        #NOTE: Redis에 캐싱 (24시간 TTL)
         if redis_client:
             redis_client.setex(redis_key, VIDEO_CATEGORY_TTL, category)
-            logger.debug(f"Video category cached: {video_id} -> {category}")
+            logger.debug(f"영상 카테고리 캐시 저장: {video_id} -> {category}")
 
         return category
 
@@ -465,14 +435,14 @@ def _get_video_duration(video_id: str) -> int:
 
         video = Video.query.filter_by(video_id=video_id).first()
         if not video:
-            logger.warning(f"Video not found for duration: {video_id}")
+            logger.warning(f"재생 시간을 조회할 영상을 찾을 수 없음: {video_id}")
             return 0
 
         duration = video.duration or 0
 
         if redis_client:
             redis_client.setex(redis_key, VIDEO_DURATION_TTL, str(duration))
-            logger.debug(f"Video duration cached: {video_id} -> {duration}")
+            logger.debug(f"영상 재생 시간 캐시 저장: {video_id} -> {duration}")
 
         return duration
 
@@ -488,11 +458,10 @@ def _check_dedupe(video_view_log_id: str, youtube_running_time: int) -> bool:
 
         dedupe_key = f"facereview:dedupe:{video_view_log_id}:{youtube_running_time}"
 
-        # SETNX: 키가 없으면 설정하고 True 반환, 이미 있으면 False 반환
+        #NOTE: SETNX와 TTL을 함께 사용해 동일 세션·시각의 중복 집계를 제한한다.
         result = redis_client.setnx(dedupe_key, 1)
 
         if result:
-            # TTL 설정 (1시간)
             redis_client.expire(dedupe_key, DEDUPE_TTL_SECONDS)
             return True
 
@@ -518,13 +487,12 @@ def _update_realtime_statistics(
             logger.error("[SAVE] extensions.mongo_db is None!")
             return
 
-        # NOTE: youtube_running_time 타입 확인 및 변환
+        #NOTE: youtube_running_time 타입 확인 및 변환
         running_time = float(youtube_running_time) if youtube_running_time is not None else 0.0
         time_key_preview = str(int(running_time * 100))
 
         logger.info(f"[REALTIME_SAVE] video_id={video_id}, original_time={youtube_running_time} (type={type(youtube_running_time).__name__}), time_key={time_key_preview}, emotion={most_emotion}")
 
-        # 1. youtube_watching_data 업데이트 (개인 시청 기록)
         watching_data_repo = YoutubeWatchingDataRepository(extensions.mongo_db)
         watching_data_repo.upsert_frame(
             video_view_log_id=video_view_log_id,
@@ -536,7 +504,6 @@ def _update_realtime_statistics(
             duration=duration
         )
 
-        # 2. video_timeline_emotion_count 업데이트
         timeline_count_repo = VideoTimelineEmotionCountRepository(extensions.mongo_db)
         timeline_count_repo.increment_emotion(
             video_id=video_id,
@@ -544,11 +511,10 @@ def _update_realtime_statistics(
             emotion=most_emotion
         )
 
-        # 3. video_distribution 업데이트 (카테고리 기반 recommendation_scores 계산 포함)
         category = _get_video_category(video_id)
         video_duration = _get_video_duration(video_id)
         video_dist_repo = VideoDistributionRepository(extensions.mongo_db)
-        updated_dist = video_dist_repo.increment_emotion(
+        video_dist_repo.increment_emotion(
             video_id=video_id,
             emotion=most_emotion,
             category=category,
@@ -564,7 +530,6 @@ def _update_realtime_statistics(
 
 def _create_video_view_log(video_view_log_id: str, user_id: str, video_id: str):
     try:
-        # 이미 존재하는지 확인
         existing = VideoViewLog.query.filter_by(video_view_log_id=video_view_log_id).first()
         if existing:
             logger.debug(f"video_view_log 이미 존재: {video_view_log_id}")

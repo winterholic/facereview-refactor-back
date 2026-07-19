@@ -1,8 +1,6 @@
-import uuid
 import datetime as dt
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
-from flask import current_app
 from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash
 
@@ -45,13 +43,11 @@ from app.dto.mypage import (
     CalendarDayDto,
     EmotionCalendarDto,
     MomentDto,
-    DnaTraitDto,
-    VideoTimelineDto,
 )
 
 
 def _extract_emotion_scores(scores) -> Dict[str, float]:
-    """emotion_score_timeline 값을 list/dict 양쪽 형태 모두 파싱"""
+    #NOTE: 신규 객체형과 기존 배열형 타임라인을 마이그레이션 없이 함께 읽는다.
     emotion_order = ['neutral', 'happy', 'surprise', 'sad', 'angry']
     result = {'neutral': 0.0, 'happy': 0.0, 'surprise': 0.0, 'sad': 0.0, 'angry': 0.0}
 
@@ -62,7 +58,6 @@ def _extract_emotion_scores(scores) -> Dict[str, float]:
         for i, emotion in enumerate(emotion_order):
             result[emotion] = float(scores[i])
     elif isinstance(scores, (list, tuple)):
-        # 5개 미만인 경우 있는 만큼만 처리
         for i, emotion in enumerate(emotion_order[:len(scores)]):
             result[emotion] = float(scores[i])
 
@@ -361,7 +356,7 @@ class MypageService:
                 db.session.add(aggregate)
                 db.session.flush()
             except IntegrityError:
-                # 동시 최초 요청에서는 먼저 생성한 트랜잭션의 행을 다시 사용한다.
+                #NOTE: 동시 최초 요청에서는 먼저 생성된 집계 행을 다시 사용한다.
                 db.session.rollback()
                 aggregate = UserEmotionSummary.query.filter_by(user_id=user_id).first()
 
@@ -369,7 +364,7 @@ class MypageService:
             base_seconds = aggregate.emotion_seconds_dict()
 
             if aggregate.last_finalized_at is None:
-                # 기존 문서는 finalized_at/emotion_seconds가 없으므로 최초 한 번만 원본을 읽는다.
+                #NOTE: 증분 필드가 없는 기존 문서는 최초 한 번만 원본 타임라인을 집계한다.
                 checkpoint_at = datetime.utcnow()
                 checkpoint_session_id = ''
                 docs = list(repo.collection.find(
@@ -420,7 +415,7 @@ class MypageService:
             db.session.rollback()
             aggregate = UserEmotionSummary.query.filter_by(user_id=user_id).first()
 
-        # 충돌이 반복되면 다른 요청이 만든 최신 누적값을 반환하고 다음 조회에서 신규분을 재시도한다.
+        #NOTE: 반복 충돌 시 최신 누적값을 반환하고 다음 조회에서 신규분을 재시도한다.
         summary = _build_emotion_summary_from_docs([
             {'emotion_seconds': aggregate.emotion_seconds_dict()}
         ])
@@ -782,7 +777,6 @@ class MypageService:
         user.is_deleted = 1
 
 
-# ── 감정 DNA 헬퍼 ──────────────────────────────────────────────────────────────
 
 _DNA_TYPES = {
     'JOYFUL_EXPLORER': {

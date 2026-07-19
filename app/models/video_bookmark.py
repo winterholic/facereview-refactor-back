@@ -12,7 +12,6 @@ def generate_uuid():
 class VideoBookmark(db.Model):
     __tablename__ = 'video_bookmark'
 
-    # Primary Key
     video_bookmark_id = Column(
         String(36),
         primary_key=True,
@@ -20,7 +19,6 @@ class VideoBookmark(db.Model):
         comment='북마크 ID (UUID)'
     )
 
-    # Foreign Keys
     video_id = Column(
         String(36),
         ForeignKey('video.video_id', ondelete='CASCADE', onupdate='CASCADE'),
@@ -34,14 +32,11 @@ class VideoBookmark(db.Model):
         comment='사용자 ID (FK)'
     )
 
-    # 타임스탬프
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='북마크 등록 시간')
 
-    # Relationships
     video = relationship('Video', back_populates='video_bookmarks')
     user = relationship('User', back_populates='video_bookmarks')
 
-    # Unique constraint (한 유저당 한 영상에 한 번만 북마크)
     __table_args__ = (
         db.UniqueConstraint('user_id', 'video_id', name='uk_bookmark_user_video'),
     )

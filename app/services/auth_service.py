@@ -63,7 +63,7 @@ class AuthService:
     @staticmethod
     @transactional_readonly
     def login(email: str, password:str) -> AuthTokenDto:
-        user = User.query.filter_by(email=email).first()
+        user = User.query.filter_by(email=email, is_deleted=False).first()
         if not user:
             raise BusinessError(APIError.AUTH_INVALID_EMAIL)
         if not check_password_hash(user.password, password):
@@ -80,7 +80,7 @@ class AuthService:
     @staticmethod
     @transactional_readonly
     def get_my_info(user_id: str) -> UserBaseDataDto:
-        user = User.query.filter_by(user_id=user_id).first()
+        user = User.query.filter_by(user_id=user_id, is_deleted=False).first()
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
@@ -139,7 +139,7 @@ class AuthService:
 
         user_id = payload.get('sub')
 
-        user = User.query.get(user_id)
+        user = User.query.filter_by(user_id=user_id, is_deleted=False).first()
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 

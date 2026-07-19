@@ -13,7 +13,7 @@ logger = get_logger('watching_data_tasks')
 )
 def save_watching_data_task(self, video_view_log_id: str, duration: int = None, client_info: dict = None, cached_data: dict = None):
     try:
-        logger.debug(f"Saving watching data: {video_view_log_id}")
+        logger.debug(f"시청 데이터 저장 시작: {video_view_log_id}")
 
         WatchingDataService.save_watching_data(
             video_view_log_id=video_view_log_id,
@@ -22,7 +22,7 @@ def save_watching_data_task(self, video_view_log_id: str, duration: int = None, 
             cached_data=cached_data
         )
 
-        logger.info(f"Successfully saved watching data: {video_view_log_id}")
+        logger.info(f"시청 데이터 저장 완료: {video_view_log_id}")
 
         return {
             'status': 'success',
@@ -31,12 +31,12 @@ def save_watching_data_task(self, video_view_log_id: str, duration: int = None, 
         }
 
     except Exception as exc:
-        logger.error(f"Error saving watching data: {exc}")
+        logger.error(f"시청 데이터 저장 실패: {exc}")
 
         try:
             raise self.retry(exc=exc)
         except self.MaxRetriesExceededError:
-            logger.error(f"Max retries exceeded for {video_view_log_id}")
+            logger.error(f"시청 데이터 저장 최대 재시도 초과: {video_view_log_id}")
             return {
                 'status': 'error',
                 'video_view_log_id': video_view_log_id,

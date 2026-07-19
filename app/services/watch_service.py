@@ -1,7 +1,4 @@
-from typing import List, Dict
-from flask import current_app
 from sqlalchemy import desc
-import traceback
 
 
 from common.extensions import db, mongo_db
@@ -19,8 +16,7 @@ from app.dto.watch import (
     VideoDetailDto, TimelineDataDto, TimelinePointDto,
     RecommendedVideoDto, RecommendedVideoListDto,
     CommentDto, CommentListDto,
-    AddCommentResponseDto, UpdateCommentResponseDto,
-    DeleteCommentResponseDto, ToggleLikeResponseDto
+    AddCommentResponseDto, ToggleLikeResponseDto
 )
 
 

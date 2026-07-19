@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 from dataclasses import dataclass, field
 from common.utils.logging_utils import get_logger
 
@@ -7,11 +7,11 @@ logger = get_logger('video_distribution')
 
 EMOTION_LABELS = ["neutral", "happy", "surprise", "sad", "angry"]
 
-# NOTE: 0.5초 간격 샘플링 기준 30프레임(실시청 15초) 미만이면 dominant_emotion 비율이
+#NOTE: 0.5초 간격 샘플링 기준 30프레임(실시청 15초) 미만이면 dominant_emotion 비율이
 #       한두 프레임의 우연으로 100%까지 튈 수 있어(통계적으로 무의미) 신뢰하지 않음.
 MIN_RELIABLE_FRAMES = 30
 
-# NOTE: 카테고리별 감정 가중치 (recommendation_scores·dominant_emotion 계산용)
+#NOTE: 카테고리별 감정 가중치 (recommendation_scores·dominant_emotion 계산용)
 CATEGORY_WEIGHTS = {
     'drama': {'neutral': 0.5, 'happy': 2.5, 'surprise': 2.0, 'sad': 3.0, 'angry': 2.0},
     'eating': {'neutral': 1.0, 'happy': 4.0, 'surprise': 2.5, 'sad': 0.2, 'angry': 0.5},
@@ -31,13 +31,12 @@ CATEGORY_WEIGHTS = {
     'etc': {'neutral': 2.5, 'happy': 2.0, 'surprise': 2.0, 'sad': 1.5, 'angry': 1.5}
 }
 
-# NOTE: 카테고리가 없을 때 기본 가중치
+#NOTE: 카테고리가 없을 때 기본 가중치
 DEFAULT_WEIGHTS = {'neutral': 2.0, 'happy': 2.0, 'surprise': 2.0, 'sad': 2.0, 'angry': 2.0}
 
 
 @dataclass
 class EmotionCounts:
-    """실시간 집계를 위한 감정 카운트"""
     neutral: int = 0
     happy: int = 0
     surprise: int = 0
@@ -111,7 +110,6 @@ class VideoDistribution:
     updated_at: Optional[datetime] = None
 
     def to_dict(self) -> Dict:
-        """MongoDB 도큐먼트로 변환"""
         return {
             'video_id': self.video_id,
             'average_completion_rate': self.average_completion_rate,
@@ -124,7 +122,6 @@ class VideoDistribution:
 
     @classmethod
     def from_dict(cls, data: Dict) -> 'VideoDistribution':
-        """MongoDB 도큐먼트에서 객체 생성"""
         emotion_avg = data.get('emotion_averages', {})
         rec_scores = data.get('recommendation_scores', {})
 
@@ -148,14 +145,10 @@ class VideoDistributionRepository:
         self.collection.create_index('video_id', unique=True)
 
     def increment_emotion(self, video_id: str, emotion: str, category: str = None, duration: int = 0):
-        """
-        watch_frame 시 호출되어 감정 카운트를 증가시키고
-        emotion_averages, recommendation_scores, average_completion_rate를 재계산함.
-        """
         if emotion not in EMOTION_LABELS:
             raise ValueError(f"Invalid emotion: {emotion}")
 
-        # NOTE: 1단계 - emotion_counts와 total_frames 증가
+        #NOTE: 1단계 - emotion_counts와 total_frames 증가
         self.collection.update_one(
             {'video_id': video_id},
             {
@@ -180,19 +173,14 @@ class VideoDistributionRepository:
             upsert=True
         )
 
-        # NOTE: 2단계 - emotion_averages, recommendation_scores, average_completion_rate 재계산
-        self._recalculate_scores(video_id, category, duration)
-
         result = self._recalculate_scores(video_id, category, duration)
-        logger.debug(f"Distribution emotion incremented: video_id={video_id}, emotion={emotion}, category={category}, duration={duration}")
+        logger.debug(
+            f"영상 감정 분포 갱신: video_id={video_id}, emotion={emotion}, "
+            f"category={category}, duration={duration}"
+        )
         return result
 
     def _recalculate_scores(self, video_id: str, category: str = None, duration: int = 0) -> Optional['VideoDistribution']:
-        """
-        emotion_counts와 total_frames를 기반으로
-        emotion_averages, recommendation_scores, average_completion_rate를 재계산함.
-        계산된 VideoDistribution 객체를 반환 (write-through 캐싱 지원용).
-        """
         doc = self.collection.find_one({'video_id': video_id})
         if not doc:
             return None
@@ -203,27 +191,27 @@ class VideoDistributionRepository:
         if total_frames == 0:
             return None
 
-        # NOTE: 카테고리가 파라미터로 안 왔으면 문서에서 가져옴
+        #NOTE: 카테고리가 파라미터로 안 왔으면 문서에서 가져옴
         if not category:
             category = doc.get('category', 'etc')
 
-        # NOTE: duration이 파라미터로 안 왔으면 문서에서 가져옴
+        #NOTE: duration이 파라미터로 안 왔으면 문서에서 가져옴
         if not duration:
             duration = doc.get('duration', 0)
 
-        # NOTE: emotion_averages 계산 (각 감정 비율)
+        #NOTE: emotion_averages 계산 (각 감정 비율)
         emotion_averages = {}
         for e in EMOTION_LABELS:
             count = emotion_counts.get(e, 0)
             emotion_averages[e] = round(count / total_frames, 4)
 
-        # NOTE: recommendation_scores 계산 (카테고리 가중치 적용)
+        #NOTE: recommendation_scores 계산 (카테고리 가중치 적용)
         weights = CATEGORY_WEIGHTS.get(category, DEFAULT_WEIGHTS)
         recommendation_scores = {}
         for e in EMOTION_LABELS:
             recommendation_scores[e] = round(emotion_averages[e] * weights[e], 4)
 
-        # NOTE: dominant_emotion은 raw emotion_averages 기준 최댓값 (화면에 노출되는 그래프/퍼센트와 항상 일치해야 함)
+        #NOTE: dominant_emotion은 raw emotion_averages 기준 최댓값 (화면에 노출되는 그래프/퍼센트와 항상 일치해야 함)
         #       recommendation_scores(카테고리 가중치)는 watch_service의 동일감정 내 랭킹 정렬 용도로만 사용
         #       단, total_frames가 MIN_RELIABLE_FRAMES 미만이면 표본이 통계적으로 무의미하므로
         #       dominant_emotion을 확정하지 않음(None) — 프론트가 기존 "시청기록 없음" 상태로 자연스럽게 처리
@@ -232,13 +220,13 @@ class VideoDistributionRepository:
             if total_frames >= MIN_RELIABLE_FRAMES else None
         )
 
-        # NOTE: average_completion_rate 계산 (0.5초 간격이므로 duration * 2가 완주 프레임 수)
+        #NOTE: average_completion_rate 계산 (0.5초 간격이므로 duration * 2가 완주 프레임 수)
         average_completion_rate = 0.0
         if duration > 0:
             expected_frames = duration * 2
             average_completion_rate = round(min(total_frames / expected_frames, 1.0), 4)
 
-        # NOTE: 계산된 값들 업데이트
+        #NOTE: 계산된 값들 업데이트
         self.collection.update_one(
             {'video_id': video_id},
             {
@@ -262,7 +250,6 @@ class VideoDistributionRepository:
         )
 
     def find_by_video_id(self, video_id: str) -> Optional[VideoDistribution]:
-        """video_id로 조회"""
         doc = self.collection.find_one({'video_id': video_id})
         return VideoDistribution.from_dict(doc) if doc else None
 
@@ -338,22 +325,22 @@ class VideoDistributionRepository:
         previous_data = compensation_data['previous_data']
 
         if was_insert:
-            # #NOTE: 새로 삽입된 경우 → 삭제
+            #NOTE: Saga에서 새로 삽입한 문서는 보상 시 제거한다.
             self.collection.delete_one({'video_id': video_id})
-            logger.info(f"Deleted video_distribution: {video_id}")
+            logger.info(f"영상 감정 분포 삭제: {video_id}")
         else:
-            # #NOTE: 업데이트된 경우 → 이전 값으로 복원
+            #NOTE: 기존 문서를 갱신했다면 보상 시 이전 값으로 복원한다.
             if previous_data:
                 self.collection.replace_one(
                     {'video_id': video_id},
                     previous_data
                 )
-                logger.info(f"Restored video_distribution: {video_id}")
+                logger.info(f"영상 감정 분포 복원: {video_id}")
 
     def compensate_delete(self, compensation_data: Dict[str, any]):
         deleted_data = compensation_data['deleted_data']
 
         if deleted_data:
-            # #NOTE: 삭제된 데이터 복원 (Saga Compensation)
+            #NOTE: Saga 보상 과정에서 삭제 전 문서를 복원한다.
             self.collection.insert_one(deleted_data)
-            logger.info(f"Restored deleted video_distribution: {deleted_data['video_id']}")
+            logger.info(f"삭제된 영상 감정 분포 복원: {deleted_data['video_id']}")

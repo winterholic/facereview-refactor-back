@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from flask_smorest import Blueprint
+from common.decorator.auth_decorators import public_route
 
 base_blueprint = Blueprint(
     'base',
@@ -10,8 +11,9 @@ base_blueprint = Blueprint(
 )
 
 @base_blueprint.route('', methods = ['GET'])
-def base_endpoint(request):
-    return{
+@public_route
+def base_endpoint():
+    return {
         "status": "ok",
         "service": "facereview",
         "time": datetime.now().isoformat()

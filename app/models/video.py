@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, BigInteger, Enum, TIMESTAMP
-from sqlalchemy.dialects.mysql import TINYINT
+from sqlalchemy import Boolean, Column, String, Integer, BigInteger, Enum, TIMESTAMP
 from sqlalchemy.orm import relationship
 from common.extensions import db
 from common.enum.youtube_genre import GenreEnum
@@ -35,7 +34,7 @@ class Video(db.Model):
 
     view_count = Column(BigInteger, default=0, comment='조회수')
 
-    is_deleted = Column(TINYINT(1), default=0, comment='삭제 여부 (0:활성, 1:삭제)')
+    is_deleted = Column(Boolean, default=False, comment='삭제 여부 (0:활성, 1:삭제)')
 
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='등록일시')
     updated_at = Column(

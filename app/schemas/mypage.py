@@ -39,7 +39,6 @@ class ChangePasswordRequestSchema(Schema):
     )
 
 
-# ==================== 1.1 최근 시청 ====================
 
 class GetRecentVideosRequestSchema(Schema):
     emotion = fields.String(
@@ -81,7 +80,6 @@ class RecentVideoListResponseSchema(Schema):
     has_next = fields.Boolean(metadata={'description': '다음 페이지 존재 여부'})
 
 
-# ==================== 1.2 감정 요약 ====================
 
 class EmotionSummaryResponseSchema(Schema):
     emotion_percentages = fields.Dict(
@@ -96,7 +94,6 @@ class EmotionSummaryResponseSchema(Schema):
     )
 
 
-# ==================== 1.3 하이라이트 ====================
 
 class EmotionVideoSchema(Schema):
     emotion = fields.String(metadata={'description': '감정 종류'})
@@ -125,7 +122,6 @@ class HighlightResponseSchema(Schema):
     most_felt_emotion = fields.String(metadata={'description': '가장 많이 느낀 감정'})
 
 
-# ==================== 2.1 감정 캘린더 ====================
 
 class GetEmotionCalendarRequestSchema(Schema):
     year = fields.Integer(
@@ -153,7 +149,6 @@ class EmotionCalendarResponseSchema(Schema):
     data = fields.List(fields.Nested(CalendarDaySchema), metadata={'description': '일자별 감정 데이터'})
 
 
-# ==================== 2.2 베스트 모먼트 ====================
 
 class GetMomentsRequestSchema(Schema):
     emotion = fields.String(
@@ -190,7 +185,6 @@ class MomentListResponseSchema(Schema):
     has_next = fields.Boolean(metadata={'description': '다음 페이지 존재 여부'})
 
 
-# ==================== 2.3 감정 DNA ====================
 
 class DnaTraitSchema(Schema):
     trait = fields.String(metadata={'description': '특성 이름'})

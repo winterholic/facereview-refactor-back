@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Optional, Any
+from typing import Dict, Optional
 from dataclasses import dataclass, field
 from common.utils.logging_utils import get_logger
 from common.utils.emotion_summary import (
@@ -237,13 +237,13 @@ class YoutubeWatchingDataRepository:
     ):
         from pymongo import ReturnDocument
 
-        # NOTE: youtube_running_time이 문자열로 올 수 있으므로 float으로 변환
+        #NOTE: youtube_running_time이 문자열로 올 수 있으므로 float으로 변환
         running_time_float = float(youtube_running_time)
 
-        # NOTE: centisecond 단위로 변환 (20.29초 → "2029")
+        #NOTE: centisecond 단위로 변환 (20.29초 → "2029")
         time_key = str(int(running_time_float * 100))
 
-        logger.debug(f"upsert_frame: video_view_log_id={video_view_log_id}, original_time={youtube_running_time}, time_key={time_key}")
+        logger.debug(f"시청 프레임 저장: video_view_log_id={video_view_log_id}, original_time={youtube_running_time}, time_key={time_key}")
 
         neutral = emotion_percentages.get('neutral', 0.0)
         happy = emotion_percentages.get('happy', 0.0)
@@ -322,7 +322,7 @@ class YoutubeWatchingDataRepository:
     def finalize(self, watching_data: 'YoutubeWatchingData') -> Dict[str, any]:
         from flask import g
 
-        # 재시도 때 종료 시각이 바뀌면 같은 세션이 신규 증분으로 다시 합산된다.
+        #NOTE: 재시도 시 종료 시각을 유지해야 같은 세션이 신규 증분으로 중복 합산되지 않는다.
         finalized_at = watching_data.finalized_at or datetime.utcnow()
         emotion_seconds = build_emotion_seconds_from_timeline(
             watching_data.most_emotion_timeline
@@ -366,14 +366,14 @@ class YoutubeWatchingDataRepository:
     def compensate_insert(self, compensation_data: Dict[str, any]):
         video_view_log_id = compensation_data['video_view_log_id']
 
-        # #NOTE: 삽입된 데이터 삭제 (Saga Compensation)
+        #NOTE: Saga에서 삽입한 시청 데이터는 보상 시 제거한다.
         self.collection.delete_one({'video_view_log_id': video_view_log_id})
-        logger.info(f"Deleted youtube_watching_data: {video_view_log_id}")
+        logger.info(f"유튜브 시청 데이터 삭제: {video_view_log_id}")
 
     def compensate_delete(self, compensation_data: Dict[str, any]):
         deleted_data = compensation_data['deleted_data']
 
         if deleted_data:
-            # #NOTE: 삭제된 데이터 복원 (Saga Compensation)
+            #NOTE: Saga 보상 과정에서 삭제 전 시청 데이터를 복원한다.
             self.collection.insert_one(deleted_data)
-            logger.info(f"Restored deleted youtube_watching_data: {deleted_data['video_view_log_id']}")
+            logger.info(f"삭제된 유튜브 시청 데이터 복원: {deleted_data['video_view_log_id']}")

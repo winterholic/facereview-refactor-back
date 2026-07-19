@@ -68,7 +68,6 @@ class YoutubeCategoryFillJob:
             targets = all_sorted[:5]
             logger.info("모든 카테고리가 기준치 이상. 최하위 5개 카테고리 보충 실행.")
 
-        # 부족분 많은 순(영상 수 적은 순) 정렬
         targets.sort(key=lambda x: x[1])
         return targets
 

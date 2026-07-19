@@ -101,7 +101,12 @@ common/
 ### Flask.g 컨텍스트 (인증 후 주입)
 - `g.user_id`: 로그인 유저 UUID / 비로그인 None
 - `g.is_guest`: 로그인 False / 비로그인 True
+- `g.current_user`: `login_required`/`login_optional`이 확인한 활성 사용자 모델
 - 라우터에서 `if g.is_guest:` 또는 `if g.user_id:`로 분기
+
+### 개발 전용 API
+- `ENABLE_DEVELOPMENT_ROUTES=True`인 개발 환경에서만 테스트 토큰·스케줄러 테스트 API를 등록
+- 운영 환경에서는 `auth_test_blueprint`, `test_blueprint`를 등록하지 않는다
 
 ### 설정값 접근
 - `os.environ` 직접 접근 금지 — 반드시 `current_app.config.get('KEY')` 사용

@@ -46,7 +46,7 @@ def decode_token(encoded_token):
     except (DecodeError, InvalidTokenError):
         raise BusinessError(APIError.AUTH_INVALID_TOKEN)
 
-    except Exception as e:
+    except Exception:
         raise BusinessError(APIError.AUTH_INVALID_TOKEN)
 
 def create_access_token(user_id):

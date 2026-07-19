@@ -1,3 +1,0 @@
-"""
-Socket event handlers
-"""

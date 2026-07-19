@@ -32,7 +32,7 @@ from app.dto.admin import (
     DominantEmotionCountDto, ContentHealthDto, BusinessStatsDto,
 )
 
-# NOTE: WAU는 video_view_log 전체 스캔(created_at 단독 인덱스 없음)이라 매 요청 재계산하지 않고 캐시
+#NOTE: WAU는 video_view_log 전체 스캔(created_at 단독 인덱스 없음)이라 매 요청 재계산하지 않고 캐시
 _WAU_CACHE_KEY = 'facereview:admin:wau'
 _WAU_CACHE_TTL_SECONDS = 900
 
@@ -107,7 +107,7 @@ class AdminService:
         if not user:
             raise BusinessError(APIError.USER_NOT_FOUND)
 
-        # NOTE: SUPER_ADMIN은 전체 대상 비활성화 가능, ADMIN은 일반(GENERAL) 유저만 가능
+        #NOTE: SUPER_ADMIN은 전체 대상 비활성화 가능, ADMIN은 일반(GENERAL) 유저만 가능
         if actor.role != 'SUPER_ADMIN' and user.role != 'GENERAL':
             raise BusinessError(APIError.USER_FORBIDDEN, "일반 회원만 비활성화할 수 있습니다.")
 
@@ -187,7 +187,7 @@ class AdminService:
         if existing_video:
             raise BusinessError(APIError.VIDEO_DUPLICATE_URL)
 
-        # NOTE: video_request는 카테고리를 안 가짐(실제 DB에 컬럼 없음, 요청 생성 시점에도 안 받음)
+        #NOTE: video_request는 카테고리를 안 가짐(실제 DB에 컬럼 없음, 요청 생성 시점에도 안 받음)
         #       — 승인하는 관리자가 이 시점에 고르는 값을 그대로 사용.
         new_video = Video(
             youtube_url=video_request.youtube_url,
@@ -393,7 +393,7 @@ class AdminService:
         start_date = (datetime.utcnow() - timedelta(days=days - 1)).date()
         today = datetime.utcnow().date()
 
-        # NOTE: 일 단위로 한 번만 집계(가입일 수는 기간과 무관하게 적음)하고, 주/월 버킷은
+        #NOTE: 일 단위로 한 번만 집계(가입일 수는 기간과 무관하게 적음)하고, 주/월 버킷은
         #       파이썬에서 묶는다 — YEARWEEK/DATE_FORMAT 등 SQL 날짜연산 없이 동일 결과.
         day_expr = func.date(User.created_at)
         rows = db.session.query(
@@ -439,7 +439,7 @@ class AdminService:
     def _get_signup_trend(days: int = 7) -> list:
         start_date = (datetime.utcnow() - timedelta(days=days - 1)).date()
 
-        # NOTE: group_by('day')처럼 문자열 라벨을 그대로 넘기면 SQLAlchemy 2.0에서
+        #NOTE: group_by('day')처럼 문자열 라벨을 그대로 넘기면 SQLAlchemy 2.0에서
         #       ArgumentError("Textual SQL ... should be explicitly declared as text(...)")로
         #       500 남 — 실제 컬럼 표현식 객체를 select/group_by 양쪽에 재사용해야 함.
         day_expr = func.date(User.created_at)
@@ -498,7 +498,7 @@ class AdminService:
 
         return VideoRequestPipelineDto(
             pending_count=pending_count,
-            # NOTE: 최근 30일 처리 이력이 없으면 avg_minutes가 None(SQL AVG의 정상 결과) —
+            #NOTE: 최근 30일 처리 이력이 없으면 avg_minutes가 None(SQL AVG의 정상 결과) —
             #       0.0으로 기본값 처리하면 "0분 만에 처리됨"으로 오해됨. null 그대로 노출해
             #       프론트가 "데이터 없음"으로 구분 표시하게 함.
             avg_processing_minutes=round(float(avg_minutes), 1) if avg_minutes is not None else None
@@ -506,12 +506,7 @@ class AdminService:
 
     @staticmethod
     def _get_content_health() -> ContentHealthDto:
-        # NOTE: youtube_watching_data(세션 원본, 매우 큼)를 매번 스캔하지 않고, watch_frame마다
-        #       이미 실시간 갱신되는 video_distribution(영상당 1문서, 작음)에서 바로 평균낸다.
-        # NOTE: 영상 승인 시점(approve_video_request)에 시청 이전부터 emotion_averages가 전부
-        #       0인 문서가 미리 생성됨(total_frames 필드 자체가 없음). 이걸 걸러내지 않고 평균내면
-        #       실제 시청된 영상들의 감정 벡터(항상 합=1)가 0벡터와 섞여 평균 감정분포 합이 100%
-        #       밑으로 처짐 — $match로 실제 시청 프레임이 쌓인 문서만 집계 대상으로 한정.
+        #NOTE: 세션 원본 대신 영상별 실시간 집계를 사용하고, 미시청 0벡터는 평균에서 제외한다.
         try:
             pipeline = [
                 {'$match': {'total_frames': {'$gt': 0}}},
@@ -553,7 +548,7 @@ class AdminService:
             if row.get('_id')
         ]
 
-        # NOTE: GenreEnum 자체가 16종으로 자연히 상한이 있어 limit 없이 전체를 반환(더 이상
+        #NOTE: GenreEnum 자체가 16종으로 자연히 상한이 있어 limit 없이 전체를 반환(더 이상
         #       "Top 5"가 아니라 카테고리별 전체 조회수 — 필드명은 하위 호환을 위해 유지).
         category_rows = db.session.query(
             Video.category, func.sum(Video.view_count)
@@ -578,7 +573,6 @@ class AdminService:
 
     @staticmethod
     def get_system_status() -> Dict:
-        # 서버 리소스
         cpu = psutil.cpu_percent(interval=0.5)
         mem = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
@@ -590,7 +584,6 @@ class AdminService:
             'disk_usage': round(disk.percent, 1),
         }
 
-        # API 요청 통계 (Redis 카운터)
         total_requests_1h = 0
         avg_response_time_ms = 0.0
         error_rate_1h = 0.0
@@ -616,7 +609,6 @@ class AdminService:
             'error_rate_1h': error_rate_1h,
         }
 
-        # DB/인프라 연결 상태
         mysql_status = 'ok'
         redis_status = 'ok'
         mongodb_status = 'ok'
@@ -732,7 +724,6 @@ class AdminService:
         }
 
 
-# ── 더미 데이터 생성 헬퍼 ─────────────────────────────────────────────────────
 
 _EMOTIONS = ['neutral', 'happy', 'surprise', 'sad', 'angry']
 

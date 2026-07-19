@@ -13,7 +13,6 @@ def generate_uuid():
 class UserFavoriteGenre(db.Model):
     __tablename__ = 'user_favorite_genre'
 
-    # Primary Key
     user_favorite_genre_id = Column(
         String(36),
         primary_key=True,
@@ -21,7 +20,6 @@ class UserFavoriteGenre(db.Model):
         comment='선호 장르 ID (UUID)'
     )
 
-    # Foreign Key
     user_id = Column(
         String(36),
         ForeignKey('user.user_id', ondelete='CASCADE', onupdate='CASCADE'),
@@ -29,14 +27,12 @@ class UserFavoriteGenre(db.Model):
         comment='사용자 ID (FK)'
     )
 
-    # 장르
     genre = Column(
         Enum(GenreEnum, values_callable=lambda x: [e.value for e in x], name='genre_enum'),
         nullable=False,
         comment='선호 장르'
     )
 
-    # 타임스탬프
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='생성일시')
     updated_at = Column(
         TIMESTAMP,
@@ -46,10 +42,8 @@ class UserFavoriteGenre(db.Model):
         comment='수정일시'
     )
 
-    # Relationship
     user = relationship('User', back_populates='favorite_genres')
 
-    # Unique constraint
     __table_args__ = (
         db.UniqueConstraint('user_id', 'genre', name='uk_user_genre'),
     )

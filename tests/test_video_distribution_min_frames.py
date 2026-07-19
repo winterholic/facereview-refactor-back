@@ -7,11 +7,13 @@ class _FakeCollection:
     def __init__(self, doc):
         self._doc = doc
         self.last_set = None
+        self.find_calls = 0
 
     def create_index(self, *args, **kwargs):
         return None
 
     def find_one(self, *args, **kwargs):
+        self.find_calls += 1
         return self._doc
 
     def update_one(self, _filter, update, **kwargs):
@@ -28,6 +30,20 @@ class _FakeDb:
 
 
 class VideoDistributionMinFramesTest(unittest.TestCase):
+    def test_increment_recalculates_distribution_once(self):
+        database = _FakeDb({
+            'video_id': 'v0',
+            'total_frames': 1,
+            'emotion_counts': {'neutral': 1},
+            'category': 'drama',
+            'duration': 60,
+        })
+        repo = VideoDistributionRepository(database)
+
+        repo.increment_emotion('v0', 'neutral', 'drama', 60)
+
+        self.assertEqual(database.collection.find_calls, 1)
+
     def test_below_threshold_dominant_emotion_stays_none(self):
         doc = {
             'video_id': 'v1',

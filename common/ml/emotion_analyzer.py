@@ -1,11 +1,10 @@
-import os
 import base64
 import io
 import numpy as np
 import cv2
 import cvlib as cv
 from PIL import Image
-from typing import Dict, Tuple
+from typing import Dict
 from common.utils.logging_utils import get_logger
 
 logger = get_logger('emotion_analyzer')
@@ -32,7 +31,7 @@ class EmotionAnalyzer:
         from common.ml import MODEL_PATH
 
         self._model = keras.models.load_model(MODEL_PATH)
-        logger.info(f"Model loaded from {MODEL_PATH}")
+        logger.info(f"감정 분석 모델 로드 완료: {MODEL_PATH}")
 
     def analyze_emotion(self, base64_frame_data: str) -> Dict[str, float]:
         try:
@@ -73,7 +72,7 @@ class EmotionAnalyzer:
             return emotion_dict
 
         except Exception as e:
-            logger.error(f"Error during emotion analysis: {e}")
+            logger.error(f"감정 분석 중 오류 발생: {e}")
             return self._get_default_emotion()
 
     def _get_default_emotion(self) -> Dict[str, float]:

@@ -1,13 +1,10 @@
-import re
 import isodate
-from datetime import datetime
 from typing import List, Dict
 import requests
 from flask import current_app
 from common.utils.logging_utils import get_logger
 
 from common.extensions import db
-from common.decorator.db_decorators import transactional
 from common.enum.youtube_genre import GenreEnum
 
 logger = get_logger('youtube_trending_job')
@@ -85,7 +82,7 @@ class YoutubeTrendingJob:
                     duration_iso = content_details.get('duration', 'PT0S')
                     try:
                         duration_seconds = int(isodate.parse_duration(duration_iso).total_seconds())
-                    except:
+                    except (TypeError, ValueError, OverflowError):
                         duration_seconds = 0
 
                     video_info = {

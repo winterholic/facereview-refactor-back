@@ -80,7 +80,6 @@ def change_password(data):
     return {"result": "success", 'message': '비밀번호가 변경되었습니다.'}
 
 
-# ==================== 1.1 최근 시청 ====================
 
 @mypage_blueprint.route('/videos/recent', methods=['GET'])
 @login_required
@@ -96,7 +95,6 @@ def get_recent_videos(args):
     )
 
 
-# ==================== 1.2 감정 요약 ====================
 
 @mypage_blueprint.route('/emotion/summary', methods=['GET'])
 @login_required
@@ -106,7 +104,6 @@ def get_emotion_summary():
     return MypageService.get_emotion_summary(g.user_id)
 
 
-# ==================== 1.3 하이라이트 ====================
 
 @mypage_blueprint.route('/highlight', methods=['GET'])
 @login_required
@@ -116,7 +113,6 @@ def get_highlight():
     return MypageService.get_highlight(g.user_id)
 
 
-# ==================== 2.1 감정 캘린더 ====================
 
 @mypage_blueprint.route('/emotion/calendar', methods=['GET'])
 @login_required
@@ -129,7 +125,6 @@ def get_emotion_calendar(args):
     return MypageService.get_emotion_calendar(g.user_id, year, month)
 
 
-# ==================== 2.2 베스트 모먼트 ====================
 
 @mypage_blueprint.route('/moments', methods=['GET'])
 @login_required
@@ -145,7 +140,6 @@ def get_moments(args):
     )
 
 
-# ==================== 2.3 감정 DNA ====================
 
 @mypage_blueprint.route('/emotion-dna', methods=['GET'])
 @login_required
@@ -155,7 +149,6 @@ def get_emotion_dna():
     return MypageService.get_emotion_dna(g.user_id)
 
 
-# ==================== 회원 탈퇴 ====================
 
 @mypage_blueprint.route('/withdraw', methods=['DELETE'])
 @login_required

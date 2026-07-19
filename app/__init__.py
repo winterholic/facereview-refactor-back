@@ -1,8 +1,3 @@
-"""
-Face Review Application
-Flask 기반 얼굴 인식 웹 애플리케이션
-"""
-
 import time
 from flask import Flask, g
 from flask_cors import CORS
@@ -10,16 +5,42 @@ from pymongo import MongoClient
 from sqlalchemy.engine import URL
 import redis
 import logging
-from common.extensions import db, socketio, api, celery
+from common.extensions import db, socketio, api
 import common.extensions as extensions
-from common.celery_app import create_celery_app
+from common.celery_app import init_celery_app
 from common.utils.logging_utils import setup_logger
 
 
-def create_app(config_name='default'):
-    """
-    Application Factory Pattern
-    """
+def _register_blueprints(api_instance, include_development=False):
+    from app.routes.base import base_blueprint
+    from app.routes.auth import auth_blueprint, auth_test_blueprint
+    from app.routes.home import home_blueprint
+    from app.routes.mypage import mypage_blueprint
+    from app.routes.watch import watch_blueprint
+    from app.routes.admin import admin_blueprint
+
+    for blueprint in (
+        base_blueprint,
+        auth_blueprint,
+        home_blueprint,
+        mypage_blueprint,
+        watch_blueprint,
+        admin_blueprint,
+    ):
+        api_instance.register_blueprint(blueprint)
+
+    if include_development:
+        from app.routes.test import test_blueprint
+        api_instance.register_blueprint(auth_test_blueprint)
+        api_instance.register_blueprint(test_blueprint)
+
+
+def create_app(
+    config_name='default',
+    *,
+    start_scheduler=True,
+    preload_emotion_model=True,
+):
     app = Flask(__name__)
 
     from common.config.config import config
@@ -57,7 +78,6 @@ def create_app(config_name='default'):
     app.config['OPENAPI_REDOC_PATH'] = '/redoc'
     app.config['OPENAPI_REDOC_URL'] = 'https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js'
 
-    # JWT Bearer 토큰 인증을 위한 보안 스킴 설정
     app.config['API_SPEC_OPTIONS'] = {
         'components': {
             'securitySchemes': {
@@ -74,16 +94,18 @@ def create_app(config_name='default'):
     db.init_app(app)
     CORS(app,
          supports_credentials=True,
-         origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:4173", "http://localhost:5000",
-         "https://facereview-api.winterholic.net",
-         "https://admin.facereview.net",
-         "https://facereview-admin.vercel.app"],
+         origins=app.config['CORS_ORIGINS'],
          allow_headers=["Content-Type", "Authorization", "Accept", "X-Requested-With"],
          expose_headers=["Authorization", "Content-Type"],
          methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
          max_age=3600)
 
-    socketio.init_app(app)
+    socketio.init_app(
+        app,
+        cors_allowed_origins=app.config['CORS_ORIGINS'],
+        logger=app.config['SOCKETIO_LOGGING'],
+        engineio_logger=app.config['SOCKETIO_LOGGING'],
+    )
     api.init_app(app)
 
     mongo_host = app.config.get('MONGO_HOST', 'localhost')
@@ -169,26 +191,16 @@ def create_app(config_name='default'):
         logger.exception("상세 오류 정보:")
         extensions.redis_client = None
 
-    from common.scheduler import init_scheduler
-    init_scheduler(app)
+    if start_scheduler:
+        from common.scheduler import init_scheduler
+        init_scheduler(app)
 
-    celery_obj = create_celery_app(app)
+    celery_obj = init_celery_app(app)
     extensions.celery = celery_obj
-    from app.routes.base import base_blueprint
-    from app.routes.auth import auth_blueprint
-    from app.routes.home import home_blueprint
-    from app.routes.mypage import mypage_blueprint
-    from app.routes.watch import watch_blueprint
-    from app.routes.admin import admin_blueprint
-    from app.routes.test import test_blueprint
-
-    api.register_blueprint(base_blueprint)
-    api.register_blueprint(auth_blueprint)
-    api.register_blueprint(home_blueprint)
-    api.register_blueprint(mypage_blueprint)
-    api.register_blueprint(watch_blueprint)
-    api.register_blueprint(admin_blueprint)
-    api.register_blueprint(test_blueprint)
+    _register_blueprints(
+        api,
+        include_development=app.config.get('ENABLE_DEVELOPMENT_ROUTES', False),
+    )
 
     from common.exception.error_handler import register_error_handlers
     register_error_handlers(app)
@@ -214,7 +226,7 @@ def create_app(config_name='default'):
                     pipe.expire('facereview:metrics:errors:1h', 3600)
                 pipe.execute()
             except Exception:
-                pass
+                logger.debug("요청 메트릭 기록 실패", exc_info=True)
         return response
 
     @app.route('/health')
@@ -224,9 +236,10 @@ def create_app(config_name='default'):
             'service': 'facereview'
         }, 200
 
-    from app.sockets import video_watching_socket
-    from app.sockets.video_watching_socket import get_emotion_analyzer
-    get_emotion_analyzer()
-    logger.info("EmotionAnalyzer 앱 시작 시 사전 로드 완료")
+    from app.sockets import video_watching_socket  # noqa: F401
+    if preload_emotion_model:
+        from app.sockets.video_watching_socket import get_emotion_analyzer
+        get_emotion_analyzer()
+        logger.info("EmotionAnalyzer 앱 시작 시 사전 로드 완료")
 
     return app

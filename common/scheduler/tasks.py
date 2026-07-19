@@ -26,7 +26,7 @@ def register_scheduled_tasks():
         replace_existing=True
     )
 
-    #NOTE: 경주마 2단 추천 Tier1 - 30분마다 Celery로 영상 본질 점수 상위 풀 재계산 (무거운 계산 오프라인화)
+    #NOTE: 2단 추천 Tier1 풀을 APScheduler에서 미리 계산해 요청 경로의 부하를 줄인다.
     #      next_run_time을 부팅 직후로 당겨 콜드스타트(첫 요청이 동기 빌드로 느려짐) 방지
     scheduler.add_job(
         id='rebuild_recommendation_pool',
@@ -66,9 +66,7 @@ def execute_youtube_category_fill_job():
 
 
 def trigger_recommendation_pool_rebuild():
-    #NOTE: 배포된 Celery 워커(celery -A common.celery_app.celery_app)는 Flask 앱 컨텍스트가 없어
-    #      DB/Mongo/Redis 접근이 불가 → 주기 빌드는 앱 컨텍스트를 가진 APScheduler에서 직접 실행한다
-    #      (원래 execute_home_cache_refresh가 쓰던 검증된 패턴). 이 빌드는 요청 경로 밖(30분 주기)이라 오프라인화 목적 충족.
+    #NOTE: DB·Mongo·Redis가 필요한 집계이므로 APScheduler의 앱 컨텍스트에서 실행한다.
     with scheduler.app.app_context():
         try:
             from app.services.home_service import HomeService

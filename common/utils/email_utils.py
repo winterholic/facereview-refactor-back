@@ -148,7 +148,7 @@ def send_verification_email(to_email: str, code: str):
         return True
 
     except Exception as e:
-        logger.error(f"Error sending verification email: {e}")
+        logger.error(f"인증 이메일 발송 실패: {e}")
         return False
 
 

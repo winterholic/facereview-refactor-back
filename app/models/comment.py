@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, TIMESTAMP, ForeignKey, Index
-from sqlalchemy.dialects.mysql import TINYINT
+from sqlalchemy import Boolean, Column, String, Text, TIMESTAMP, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from common.extensions import db
 
@@ -13,7 +12,6 @@ def generate_uuid():
 class Comment(db.Model):
     __tablename__ = 'comment'
 
-    # Primary Key
     comment_id = Column(
         String(36),
         primary_key=True,
@@ -21,7 +19,6 @@ class Comment(db.Model):
         comment='댓글 ID (UUID)'
     )
 
-    # Foreign Keys
     video_id = Column(
         String(36),
         ForeignKey('video.video_id', ondelete='CASCADE', onupdate='CASCADE'),
@@ -35,14 +32,11 @@ class Comment(db.Model):
         comment='작성자 ID (FK)'
     )
 
-    # 댓글 내용
     content = Column(Text, nullable=False, comment='댓글 내용')
 
-    # 상태 정보
-    is_modified = Column(TINYINT(1), default=0, comment='수정 여부 (0:원본, 1:수정됨)')
-    is_deleted = Column(TINYINT(1), default=0, comment='삭제 여부 (0:활성, 1:삭제됨 - 관리자 확인용)')
+    is_modified = Column(Boolean, default=False, comment='수정 여부 (0:원본, 1:수정됨)')
+    is_deleted = Column(Boolean, default=False, comment='삭제 여부 (0:활성, 1:삭제됨 - 관리자 확인용)')
 
-    # 타임스탬프
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='작성일시')
     updated_at = Column(
         TIMESTAMP,
@@ -52,11 +46,9 @@ class Comment(db.Model):
         comment='수정일시'
     )
 
-    # Relationships
     video = relationship('Video', back_populates='comments')
     user = relationship('User', back_populates='comments')
 
-    # Index (영상별 댓글 조회 최적화)
     __table_args__ = (
         Index('idx_video_comments', 'video_id', 'is_deleted', 'created_at'),
     )

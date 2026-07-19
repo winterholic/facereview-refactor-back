@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Integer, Enum, TIMESTAMP
-from sqlalchemy.dialects.mysql import TINYINT
+from sqlalchemy import Boolean, Column, String, Integer, Enum, TIMESTAMP
 from sqlalchemy.orm import relationship
 from common.extensions import db
 from app.models.user_point_history import UserPointHistory
@@ -14,15 +13,12 @@ def generate_uuid():
 class User(db.Model):
     __tablename__ = 'user'
 
-    # Primary Key
     user_id = Column(String(36), primary_key=True, default=generate_uuid, comment='사용자 고유 ID (UUID)')
 
-    # 기본 정보
     email = Column(String(255), nullable=False, unique=True, comment='이메일 (로그인 ID)')
     password = Column(String(255), nullable=False, comment='암호화된 비밀번호')
     name = Column(String(50), nullable=False, comment='사용자 이름')
 
-    # 상태 및 권한
     role = Column(
         Enum('GENERAL', 'ADMIN', 'SUPER_ADMIN', name='user_role_enum'),
         default='GENERAL',
@@ -30,11 +26,10 @@ class User(db.Model):
         comment='사용자 권한'
     )
     profile_image_id = Column(Integer, default=0, comment='프로필 이미지 ID (클라이언트 리소스 매핑용)')
-    is_tutorial_done = Column(TINYINT(1), default=0, comment='튜토리얼 완료 여부 (0:미완료, 1:완료)')
-    is_verify_email_done = Column(TINYINT(1), default=0, comment='이메일 인증 완료 여부 (0:미완료, 1:완료)')
-    is_deleted = Column(TINYINT(1), default=0, comment='탈퇴 여부 (0:활성, 1:탈퇴)')
+    is_tutorial_done = Column(Boolean, default=False, comment='튜토리얼 완료 여부 (0:미완료, 1:완료)')
+    is_verify_email_done = Column(Boolean, default=False, comment='이메일 인증 완료 여부 (0:미완료, 1:완료)')
+    is_deleted = Column(Boolean, default=False, comment='탈퇴 여부 (0:활성, 1:탈퇴)')
 
-    # 타임스탬프
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='생성일시')
     updated_at = Column(
         TIMESTAMP,
@@ -44,7 +39,6 @@ class User(db.Model):
         comment='수정일시 (자동 갱신)'
     )
 
-    # Relationships
     favorite_genres = relationship(
         'UserFavoriteGenre',
         back_populates='user',

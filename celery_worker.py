@@ -1,19 +1,13 @@
-"""
-Celery Worker 실행 스크립트
-Flask app context와 함께 Celery worker를 실행
-"""
+import os
 
 from app import create_app
-from common.extensions import celery
+from common.celery_app import create_worker_celery
 
-# Flask app 생성
-app = create_app()
-
-# Flask app context를 Celery에 연결
-celery.conf.update(app.config)
+celery = create_worker_celery(
+    create_app,
+    os.getenv('FLASK_ENV', 'production'),
+)
 
 
 if __name__ == '__main__':
-    # Celery worker 실행
-    # 명령어: python celery_worker.py worker --loglevel=info
     celery.start()

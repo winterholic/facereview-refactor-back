@@ -20,6 +20,13 @@ auth_blueprint = Blueprint(
     description='인증 관련 API'
 )
 
+auth_test_blueprint = Blueprint(
+    'auth_test',
+    __name__,
+    url_prefix='/api/v2/auth',
+    description='개발 환경 전용 인증 API'
+)
+
 
 @auth_blueprint.route('/check-email', methods=['POST'])
 @public_route
@@ -142,9 +149,9 @@ def reissue_token():
     return response
 
 
-@auth_blueprint.route('/test-token', methods=['POST'])
+@auth_test_blueprint.route('/test-token', methods=['POST'])
 @public_route
-@auth_blueprint.response(200, TestTokenResponseSchema)
-@auth_blueprint.doc(summary="테스트용 토큰 발급 (개발 전용)")
+@auth_test_blueprint.response(200, TestTokenResponseSchema)
+@auth_test_blueprint.doc(summary="테스트용 토큰 발급 (개발 전용)")
 def test_token():
     return AuthService.test_token()

@@ -1,21 +1,7 @@
-"""
-Celery Application
-Flask와 통합된 Celery 앱
-"""
-
 from celery import Celery
 
 
-def create_celery_app(app=None):
-    """
-    Flask 앱과 통합된 Celery 앱 생성
-
-    Args:
-        app: Flask application instance (optional)
-
-    Returns:
-        Celery: Celery application instance
-    """
+def create_celery_app():
     celery = Celery(
         'facereview',
         broker=None,
@@ -26,18 +12,36 @@ def create_celery_app(app=None):
     from common.config.celery_config import CeleryConfig
     celery.config_from_object(CeleryConfig)
 
-    if app:
-        # Flask app context에서 실행되도록 설정
-        class ContextTask(celery.Task):
-            def __call__(self, *args, **kwargs):
-                with app.app_context():
-                    return self.run(*args, **kwargs)
-
-        celery.Task = ContextTask
-
     return celery
 
 
-# Celery 인스턴스 생성 (Flask app 없이)
-# Flask app은 나중에 init_app에서 설정
+def init_celery_app(app, celery=None):
+    celery = celery or celery_app
+    if getattr(celery, '_facereview_flask_app', None) is app:
+        return celery
+
+    celery.conf.update(app.config)
+    base_task = celery.Task
+
+    class FlaskContextTask(base_task):
+        abstract = True
+
+        def __call__(self, *args, **kwargs):
+            with app.app_context():
+                return super().__call__(*args, **kwargs)
+
+    celery.Task = FlaskContextTask
+    celery._facereview_flask_app = app
+    return celery
+
+
+def create_worker_celery(app_factory, config_name, celery=None):
+    app = app_factory(
+        config_name,
+        start_scheduler=False,
+        preload_emotion_model=False,
+    )
+    return init_celery_app(app, celery)
+
+
 celery_app = create_celery_app()

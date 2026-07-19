@@ -24,11 +24,11 @@ def union_transactional(func):
 
             db.session.commit()
 
-            logger.info(f"Transaction {transaction_id} committed successfully")
+            logger.info(f"트랜잭션 커밋 완료: {transaction_id}")
             return result
 
         except Exception as e:
-            logger.error(f"Transaction {transaction_id} failed: {e}")
+            logger.error(f"트랜잭션 실패: {transaction_id}, error={e}")
 
             db.session.rollback()
 
@@ -100,12 +100,9 @@ def transactional(func):
 
             return result
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             raise
-
-        finally:
-            pass
 
     return wrapper
 
@@ -117,11 +114,8 @@ def transactional_readonly(func):
             result = func(*args, **kwargs)
             return result
 
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             raise
-
-        finally:
-            pass
 
     return wrapper

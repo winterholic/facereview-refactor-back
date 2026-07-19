@@ -22,23 +22,17 @@ class StepStatus(str, Enum):
 
 @dataclass
 class SagaStep:
-    # 단계 이름 (예: "rdb_insert_video", "mongo_insert_watching_data")
     name: str
 
-    # 단계 상태
     status: StepStatus = StepStatus.PENDING
 
-    # 실행 시작/종료 시각
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
-    # 보상 트랜잭션 실행 시각
     compensated_at: Optional[datetime] = None
 
-    # 에러 정보
     error_message: Optional[str] = None
 
-    # 보상 트랜잭션에 필요한 데이터 (예: 삭제할 ID, 원래 값 등)
     compensation_data: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict:
@@ -67,28 +61,20 @@ class SagaStep:
 
 @dataclass
 class SagaTransactionLog:
-    # 트랜잭션 ID (UUID)
     transaction_id: str
 
-    # 전체 사가 상태
     status: SagaStatus = SagaStatus.PENDING
 
-    # 실행할 단계들 (순서 보장)
     steps: List[SagaStep] = field(default_factory=list)
 
-    # 생성 시각
     created_at: datetime = field(default_factory=datetime.utcnow)
 
-    # 완료 시각
     completed_at: Optional[datetime] = None
 
-    # 보상 시작 시각
     compensation_started_at: Optional[datetime] = None
 
-    # 보상 완료 시각
     compensation_completed_at: Optional[datetime] = None
 
-    # 메타 데이터 (디버깅/추적용)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict:
@@ -138,28 +124,28 @@ class SagaTransactionLogRepository:
 
     def __init__(self, db):
         self.collection = db[self.COLLECTION_NAME]
-        # NOTE : 인덱스 생성
+        #NOTE: 인덱스 생성
         self.collection.create_index('transaction_id', unique=True)
         self.collection.create_index([('created_at', -1)])
         self.collection.create_index([('status', 1)])
 
-    # NOTE : 사가 로그 생성
+    #NOTE: 사가 로그 생성
     def insert(self, saga_log: SagaTransactionLog):
         self.collection.insert_one(saga_log.to_dict())
 
-    # NOTE : 트랜잭션 ID로 조회
+    #NOTE: 트랜잭션 ID로 조회
     def find_by_transaction_id(self, transaction_id: str) -> Optional[SagaTransactionLog]:
         doc = self.collection.find_one({'transaction_id': transaction_id})
         return SagaTransactionLog.from_dict(doc) if doc else None
 
-    # NOTE : 사가 상태 업데이트
+    #NOTE: 사가 상태 업데이트
     def update_status(self, transaction_id: str, status: SagaStatus):
         self.collection.update_one(
             {'transaction_id': transaction_id},
             {'$set': {'status': status.value}}
         )
 
-    # NOTE : 특정 단계 업데이트
+    #NOTE: 특정 단계 업데이트
     def update_step(self, transaction_id: str, step_index: int, update_data: Dict):
         field_updates = {
             f'steps.{step_index}.{key}': value
@@ -171,14 +157,14 @@ class SagaTransactionLogRepository:
             {'$set': field_updates}
         )
 
-    # NOTE : 단계를 완료로 표시
+    #NOTE: 단계를 완료로 표시
     def mark_step_completed(self, transaction_id: str, step_index: int):
         self.update_step(transaction_id, step_index, {
             'status': StepStatus.COMPLETED.value,
             'completed_at': datetime.utcnow()
         })
 
-    # NOTE : 단계를 실패로 표시
+    #NOTE: 단계를 실패로 표시
     def mark_step_failed(self, transaction_id: str, step_index: int, error_message: str):
         self.update_step(transaction_id, step_index, {
             'status': StepStatus.FAILED.value,
@@ -186,14 +172,14 @@ class SagaTransactionLogRepository:
             'completed_at': datetime.utcnow()
         })
 
-    # NOTE : 단계를 보상 완료로 표시
+    #NOTE: 단계를 보상 완료로 표시
     def mark_step_compensated(self, transaction_id: str, step_index: int):
         self.update_step(transaction_id, step_index, {
             'status': StepStatus.COMPENSATED.value,
             'compensated_at': datetime.utcnow()
         })
 
-    # NOTE : 보상 트랜잭션 시작
+    #NOTE: 보상 트랜잭션 시작
     def start_compensation(self, transaction_id: str):
         self.collection.update_one(
             {'transaction_id': transaction_id},
@@ -205,7 +191,7 @@ class SagaTransactionLogRepository:
             }
         )
 
-    # NOTE : 보상 트랜잭션 완료
+    #NOTE: 보상 트랜잭션 완료
     def complete_compensation(self, transaction_id: str):
         self.collection.update_one(
             {'transaction_id': transaction_id},
@@ -217,7 +203,7 @@ class SagaTransactionLogRepository:
             }
         )
 
-    # NOTE : 사가 성공 완료
+    #NOTE: 사가 성공 완료
     def complete_saga(self, transaction_id: str):
         self.collection.update_one(
             {'transaction_id': transaction_id},
@@ -229,7 +215,7 @@ class SagaTransactionLogRepository:
             }
         )
 
-    # NOTE : 사가 실패로 표시 (보상 불가능)
+    #NOTE: 사가 실패로 표시 (보상 불가능)
     def mark_failed(self, transaction_id: str):
         self.collection.update_one(
             {'transaction_id': transaction_id},
@@ -241,7 +227,7 @@ class SagaTransactionLogRepository:
             }
         )
 
-    # NOTE : 오래된 로그 삭제 (기본 30일 이전)
+    #NOTE: 오래된 로그 삭제 (기본 30일 이전)
     def delete_old_logs(self, days: int = 30):
         from datetime import timedelta
         cutoff_date = datetime.utcnow() - timedelta(days=days)

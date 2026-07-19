@@ -26,7 +26,6 @@ class VideoTimelineDto:
         return {'id': self.id, 'data': [p.to_dict() for p in self.data]}
 
 
-# ==================== 1.1 최근 시청 ====================
 
 @dataclass
 class RecentVideoDto:
@@ -68,7 +67,6 @@ class RecentVideoListDto:
         }
 
 
-# ==================== 1.2 감정 요약 ====================
 
 @dataclass
 class EmotionSummaryDto:
@@ -82,7 +80,6 @@ class EmotionSummaryDto:
         }
 
 
-# ==================== 1.3 하이라이트 ====================
 
 @dataclass
 class EmotionVideoDto:
@@ -132,7 +129,6 @@ class HighlightDto:
         }
 
 
-# ==================== 2.1 감정 캘린더 ====================
 
 @dataclass
 class CalendarDayDto:
@@ -166,7 +162,6 @@ class EmotionCalendarDto:
         }
 
 
-# ==================== 2.2 베스트 모먼트 ====================
 
 @dataclass
 class MomentDto:
@@ -192,7 +187,6 @@ class MomentDto:
         }
 
 
-# ==================== 2.3 감정 DNA ====================
 
 @dataclass
 class DnaTraitDto:

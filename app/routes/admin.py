@@ -1,4 +1,3 @@
-from functools import wraps
 from flask import g
 from flask_smorest import Blueprint
 
@@ -21,9 +20,11 @@ from app.schemas.admin import (
     GenerateDummyDataResponseSchema
 )
 from app.services.admin_service import AdminService
-from common.decorator.auth_decorators import login_required
-from common.exception.exceptions import BusinessError
-from common.enum.error_code import APIError
+from common.decorator.auth_decorators import (
+    admin_required,
+    login_required,
+    super_admin_required,
+)
 
 admin_blueprint = Blueprint(
     'admin',
@@ -31,37 +32,6 @@ admin_blueprint = Blueprint(
     url_prefix='/api/v2/admin',
     description='관리자 페이지 API'
 )
-
-
-def admin_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        from app.models.user import User
-        from common.extensions import db
-
-        user = db.session.query(User).filter_by(user_id=g.user_id).first()
-        if not user or user.role not in ('ADMIN', 'SUPER_ADMIN'):
-            raise BusinessError(APIError.USER_NOT_FOUND, "관리자 권한이 필요합니다.")
-
-        return func(*args, **kwargs)
-
-    return wrapper
-
-
-def super_admin_required(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        from app.models.user import User
-        from common.extensions import db
-
-        user = db.session.query(User).filter_by(user_id=g.user_id).first()
-        if not user or user.role != 'SUPER_ADMIN':
-            raise BusinessError(APIError.USER_NOT_FOUND, "최고 관리자 권한이 필요합니다.")
-
-        return func(*args, **kwargs)
-
-    return wrapper
-
 
 @admin_blueprint.route('/users', methods=['GET'])
 @login_required

@@ -12,7 +12,6 @@ def generate_uuid():
 class UserPointHistory(db.Model):
     __tablename__ = 'user_point_history'
 
-    # Primary Key
     user_point_history_id = Column(
         String(36),
         primary_key=True,
@@ -20,7 +19,6 @@ class UserPointHistory(db.Model):
         comment='포인트 이력 ID (UUID)'
     )
 
-    # Foreign Keys
     user_id = Column(
         String(36),
         ForeignKey('user.user_id', ondelete='CASCADE', onupdate='CASCADE'),
@@ -34,12 +32,10 @@ class UserPointHistory(db.Model):
         comment='관련 영상 ID (FK)'
     )
 
-    # 포인트 정보
     amount = Column(Integer, nullable=False, comment='변동 포인트 (양수:획득, 음수:사용)')
     watch_time = Column(Integer, default=0, comment='인정된 시청 시간(초)')
     description = Column(String(255), comment='내역 설명')
 
-    # 타임스탬프
     created_at = Column(TIMESTAMP, default=datetime.utcnow, nullable=False, comment='생성일시')
     updated_at = Column(
         TIMESTAMP,
@@ -49,7 +45,6 @@ class UserPointHistory(db.Model):
         comment='수정일시'
     )
 
-    # Relationships
     user = relationship('User', back_populates='point_history')
     video = relationship('Video', back_populates='point_history')
 

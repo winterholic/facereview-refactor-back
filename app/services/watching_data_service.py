@@ -3,7 +3,7 @@ from datetime import datetime
 import common.extensions as extensions
 from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository, EmotionPercentages, ClientInfo
 from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository, MIN_RELIABLE_FRAMES
-from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCount, VideoTimelineEmotionCountRepository
+from app.models.mongodb.video_timeline_emotion_count import VideoTimelineEmotionCountRepository
 from common.utils.logging_utils import get_logger
 
 logger = get_logger('watching_data_service')
@@ -245,12 +245,7 @@ class WatchingDataService:
                 angry=round(emotion_averages.angry * 3, 3)
             )
 
-            #NOTE: dominant_emotion은 raw emotion_averages 기준 최댓값이어야 화면에 노출되는
-            #      dominant_emotion_per(emotion_averages[dominant_emotion])와 항상 일치함
-            #      (video_distribution._recalculate_scores와 동일 원칙). recommendation_scores
-            #      (고정 가중치 neutral*2/happy*3/surprise*4/sad*3/angry*3)로 뽑으면 raw 1위가
-            #      아닌 감정이 dominant로 노출될 수 있음 — 실측 확인: happy raw 25%인데 surprise
-            #      raw 21%*4=0.84 > happy 25%*3=0.75로 surprise가 뽑히던 실제 오류.
+            #NOTE: 대표 감정은 화면의 감정 비율과 일치해야 하므로 가중 점수가 아닌 원본 평균에서 고른다.
             averages_dict = {
                 'neutral': emotion_averages.neutral,
                 'happy': emotion_averages.happy,
@@ -258,8 +253,7 @@ class WatchingDataService:
                 'sad': emotion_averages.sad,
                 'angry': emotion_averages.angry
             }
-            #NOTE: 여기서의 count는 세션 수일 뿐 실제 신뢰도는 세션들이 관찰한 총 프레임 수로 판단해야 함
-            #      (video_distribution._recalculate_scores와 동일한 MIN_RELIABLE_FRAMES 게이트를 여기도 적용)
+            #NOTE: 표본 신뢰도는 세션 수가 아니라 실제 관찰 프레임 수로 판단한다.
             total_frames_observed = sum(len(wd.emotion_score_timeline) for wd in all_watching_data)
             dominant_emotion = (
                 max(averages_dict, key=averages_dict.get)

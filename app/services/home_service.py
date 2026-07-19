@@ -2,23 +2,20 @@ import dataclasses
 import json
 import random
 import time
-from flask import current_app
 from common.decorator.db_decorators import transactional_readonly, transactional
 from app.models.user import User
 from app.models.video import Video
-from app.models import UserFavoriteGenre, VideoViewLog, VideoRequest, VideoBookmark
+from app.models import VideoViewLog, VideoRequest, VideoBookmark
 from app.models.video_like import VideoLike
-from app.models.mongodb.youtube_watching_data import YoutubeWatchingData, YoutubeWatchingDataRepository
-from app.models.mongodb.video_distribution import VideoDistribution, VideoDistributionRepository
+from app.models.mongodb.youtube_watching_data import YoutubeWatchingDataRepository
+from app.models.mongodb.video_distribution import VideoDistributionRepository
 from common.enum.error_code import APIError
 from common.enum.youtube_genre import GenreEnum
 from common.exception.exceptions import BusinessError
-from common.extensions import db, mongo_client, mongo_db
+from common.extensions import db, mongo_db
 from common.utils.recommendation_alg import compute_base_score, rank_personalized
 from app.dto.home import BaseVideoDataDto, CategoryVideoDataDto, CategoryVideoDataListDto, AllVideoDataDto
 from sqlalchemy import or_, func
-from bson.codec_options import CodecOptions
-from bson.binary import UuidRepresentation
 from common.utils.logging_utils import get_logger
 
 logger = get_logger('home_service')
@@ -423,7 +420,7 @@ class HomeService:
             _, category_dtos = HomeService._build_and_cache_ranked_pool()
 
         #NOTE: category_dtos는 인메모리 폴백 캐시(_MEM_CACHE)가 프로세스 전역으로 공유하는 객체일 수 있으므로
-        #      절대 원본을 mutate하지 않고, 북마크 여부만 반영한 새 DTO로 복제해서 반환 (아니면 유저 A의 북마크가 다른 요청에 새어나감)
+        #      캐시 원본을 수정하면 사용자별 북마크 상태가 다른 요청에 누출되므로 새 DTO로 복제한다.
         if user_id:
             all_video_ids = [v.video_id for cat in category_dtos for v in cat.videos]
             bookmarked_ids = HomeService._get_bookmarked_ids(user_id, all_video_ids)
@@ -587,7 +584,7 @@ class HomeService:
             has_next=has_next
         )
 
-    #TODO : bulk_save 확인해보기
+    #TODO: bulk_save 확인해보기
     @staticmethod
     @transactional
     def create_user_video_recommend(user_id: str, youtube_url_list: list):
