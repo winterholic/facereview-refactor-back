@@ -3,7 +3,7 @@ title: "FaceReview My Page Features"
 description: "마이페이지 감정 분석 API와 집계 방식의 현재 동작"
 document_type: "feature-reference"
 status: "active"
-version: "3.1"
+version: "3.2"
 created: "2026-02-20"
 updated: "2026-07-19"
 source_of_truth:
@@ -179,7 +179,7 @@ tags: ["mypage", "emotion", "analytics", "api"]
 
 **디자인 방향**: 날짜별 셀에 감정 색상을 입히고, 시청량에 따라 채도/명도를 조절하는 히트맵 방식. 날짜 클릭 시 해당 날짜의 시청 목록을 모달 또는 사이드 패널로 노출.
 
-**현재 구현**: MongoDB `youtube_watching_data.created_at`, `dominant_emotion`, `emotion_percentages`를 요청 시 집계한다. `total_watch_time`은 현재 타임라인을 초당 2프레임으로 환산하지만 수집 경로는 초당 10프레임을 사용하므로 보정 필요.
+**현재 구현**: MongoDB `youtube_watching_data.created_at`, `dominant_emotion`, `emotion_percentages`를 요청 시 집계한다. 프론트의 감정 프레임 전송 계약은 0.5초마다 1회(초당 2프레임)다. `WatchingDataService`의 완료율 계산과 `MypageService`의 일부 레거시 fallback에 남은 `/ 10` 환산은 과거 0.1초 설계의 잔재이므로 `/ 2` 기준으로 정리해야 한다.
 
 ---
 
