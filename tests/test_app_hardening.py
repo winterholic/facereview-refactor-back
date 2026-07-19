@@ -307,7 +307,7 @@ class CeleryInitializationTest(unittest.TestCase):
 
         self.assertIn(
             'celery -A celery_worker.celery worker --loglevel=info '
-            '--queues=celery,watching_data',
+            '--queues=celery,watching_data --concurrency=4',
             compose,
         )
 

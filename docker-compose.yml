@@ -31,7 +31,7 @@ services:
       - FLASK_ENV=production
     # 이미지 ENTRYPOINT가 gunicorn 고정이라 비워야 아래 command(celery)가 실제로 실행됨
     entrypoint: []
-    command: celery -A celery_worker.celery worker --loglevel=info --queues=celery,watching_data
+    command: celery -A celery_worker.celery worker --loglevel=info --queues=celery,watching_data --concurrency=4
     healthcheck:
       disable: true
     volumes:
