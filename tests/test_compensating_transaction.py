@@ -23,6 +23,7 @@ from app.models.mongodb.youtube_watching_data import (
 from app.models.user import User
 from app.models.video import Video
 from app.models.video_request import VideoRequest
+from app.models.video_view_log import VideoViewLog
 from app.services.admin_service import AdminService
 from common.enum.youtube_genre import GenreEnum
 from common.extensions import db
@@ -342,6 +343,49 @@ class AdminApprovalCompensationIntegrationTest(unittest.TestCase):
         self.assertEqual(request.status, 'PENDING')
         distribution_collection.delete_one.assert_called_once()
         timeline_collection.delete_one.assert_called_once()
+
+    def test_dummy_session_increments_video_view_count(self):
+        video = Video(
+            video_id='video-1',
+            youtube_url='youtube-dummy',
+            title='dummy title',
+            channel_name='dummy channel',
+            category=GenreEnum.ETC,
+            duration=120,
+            view_count=0,
+            is_deleted=0,
+        )
+        db.session.add(video)
+        db.session.commit()
+
+        watching_data = YoutubeWatchingData(
+            user_id='user-1',
+            video_id='video-1',
+            video_view_log_id='view-1',
+            created_at=datetime.utcnow(),
+        )
+        view_log = VideoViewLog(
+            video_view_log_id='view-1',
+            user_id='user-1',
+            video_id='video-1',
+        )
+        watching_collection = MagicMock()
+        distribution_collection = MagicMock()
+        mongo_database = {
+            'youtube_watching_data': watching_collection,
+            'video_distribution': distribution_collection,
+        }
+
+        with (
+            patch('app.services.admin_service.mongo_db', mongo_database),
+            patch(
+                'app.services.watching_data_service.WatchingDataService._update_video_distribution'
+            ),
+        ):
+            AdminService._save_dummy_session(watching_data, view_log)
+
+        db.session.expire_all()
+        self.assertEqual(Video.query.get('video-1').view_count, 1)
 
 
 if __name__ == '__main__':

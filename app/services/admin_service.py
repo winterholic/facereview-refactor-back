@@ -663,9 +663,16 @@ class AdminService:
     ) -> str:
         watching_data_repo = YoutubeWatchingDataRepository(mongo_db)
         video_dist_repo = VideoDistributionRepository(mongo_db)
+        video = Video.query.filter_by(
+            video_id=watching_data.video_id,
+            is_deleted=0,
+        ).first()
+        if not video:
+            raise BusinessError(APIError.VIDEO_NOT_FOUND)
 
         watching_data_repo.insert(watching_data)
         db.session.add(view_log)
+        video.view_count += 1
 
         # NOTE: 파생 분포도 같은 경계에서 갱신해야 실패 시 이전 값으로 복구된다.
         from app.services.watching_data_service import WatchingDataService
